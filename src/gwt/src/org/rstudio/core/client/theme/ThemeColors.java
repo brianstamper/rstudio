@@ -24,13 +24,13 @@ public class ThemeColors
    public static String defaultBorder                              = "rgb(214,218,220)";
    public static String defaultBodyBackground                      = "rgb(246, 247, 249)";
 
-   public static String darkGreyBackground                         = "rgb(78, 92, 104)";
-   public static String darkGreyBackgroundTransparent              = "rgba(78, 92, 104, 0)";
-   public static String darkGreyInactiveBackground                 = "rgb(57, 67, 75)";
-   public static String darkGreyMostInactiveBackground             = "rgb(47, 57, 65)";
+   public static String darkGreyBackground                         = "#3f3c36";
+   public static String darkGreyBackgroundTransparent              = "rgba(63, 60, 54, 0)";
+   public static String darkGreyInactiveBackground                 = "#151514";
+   public static String darkGreyMostInactiveBackground             = "#0d0d0c";
    public static String darkGreyMostInactiveTransparentBackground  = "rgba(47, 57, 65, 0)";
-   public static String darkGreyBorder                             = "rgb(12, 31, 48)";
-   public static String darkGreyBodyBackground                     = "rgb(50, 76, 99)";
+   public static String darkGreyBorder                             = "#111712";
+   public static String darkGreyBodyBackground                     = "#393023";
 
    public static String darkGreyMenuBackground                     = darkGreyMostInactiveBackground;
    public static String darkGreyMenuBorder                         = darkGreyBackground;
@@ -47,8 +47,8 @@ public class ThemeColors
    public static String lightControlBackground                     = "#FFF";
    public static String lightControlBorder                         = "#d6dadc";
 
-   public static String darkControlBackground                      = "rgb(108,121,131)";
-   public static String darkControlBorder                          = "rgb(45,60,75)";
+   public static String darkControlBackground                      = "rgb(40,35,30)";
+   public static String darkControlBorder                          = "rgb(19,18,17)";
 
    public static String darkRowSelected                            = "rgba(255, 255, 255, 0.15)";
    public static String darkRowFocused                             = "rgba(255, 255, 255, 0.20)";
