@@ -1,7 +1,7 @@
 /*
  * RSessionContext.cpp
  *
- * Copyright (C) 2009-18 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -23,7 +23,7 @@
 #include <boost/algorithm/string/regex.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
-#include <core/FilePath.hpp>
+#include <shared_core/FilePath.hpp>
 #include <core/Settings.hpp>
 #include <core/FileSerializer.hpp>
 
@@ -42,7 +42,7 @@
 #include <core/system/PosixUser.hpp>
 #endif
 
-#include <core/SafeConvert.hpp>
+#include <shared_core/SafeConvert.hpp>
 #include <core/system/Environment.hpp>
 
 #include "config.h"
@@ -94,6 +94,20 @@ SessionScope SessionScope::projectNone(const std::string& id)
    return SessionScope(ProjectId(kProjectNoneId), id);
 }
 
+SessionScope SessionScope::jupyterLabSession(const std::string& id)
+{
+   // note: project ID is currently unused as it is meaningless
+   // in the context of Jupyter sessions
+   return SessionScope(ProjectId(kJupyterLabId), id);
+}
+
+SessionScope SessionScope::jupyterNotebookSession(const std::string& id)
+{
+   // note: project ID is currently unused as it is meaningless
+   // in the context of Jupyter sessions
+   return SessionScope(ProjectId(kJupyterNotebookId), id);
+}
+
 bool SessionScope::isProjectNone() const
 {
    return project_.id() == kProjectNoneId;
@@ -102,6 +116,31 @@ bool SessionScope::isProjectNone() const
 bool SessionScope::isWorkspaces() const
 {
    return project_.id() == kWorkspacesId;
+}
+
+bool SessionScope::isJupyter() const
+{
+   return isJupyterLab() || isJupyterNotebook();
+}
+
+bool SessionScope::isJupyterLab() const
+{
+   return project_.id() == kJupyterLabId;
+}
+
+bool SessionScope::isJupyterNotebook() const
+{
+   return project_.id() == kJupyterNotebookId;
+}
+
+std::string SessionScope::workbench() const
+{
+   if (!isJupyter())
+      return kWorkbenchRStudio;
+   else if (isJupyterLab())
+      return kWorkbenchJupyterLab;
+   else
+      return kWorkbenchJupyterNotebook;
 }
 
 // This function is intended to tell us whether a given path corresponds to an
@@ -121,7 +160,7 @@ bool isSharedPath(const std::string& projectPath,
       return false;
 
    struct stat st;
-   if (::stat(projectDir.absolutePath().c_str(), &st) == 0)
+   if (::stat(projectDir.getAbsolutePath().c_str(), &st) == 0)
    {
       // not shared if we own the directory
       if (st.st_uid == ::geteuid())
@@ -131,8 +170,8 @@ bool isSharedPath(const std::string& projectPath,
       if (st.st_mode & (S_IROTH | S_IWOTH | S_IXOTH)) 
          return false;
 
-      core::system::user::User user;
-      error = core::system::user::currentUser(&user);
+      core::system::User user;
+      error = core::system::User::getCurrentUser(user);
       if (error)
       {
          LOG_ERROR(error);
@@ -140,7 +179,7 @@ bool isSharedPath(const std::string& projectPath,
       }
 
       // not shared if our group owns the directory 
-      if (st.st_gid == user.groupId)
+      if (st.st_gid == user.getGroupId())
          return false;
 
 #ifndef __APPLE__
@@ -158,7 +197,7 @@ bool isSharedPath(const std::string& projectPath,
    else
    {
       error = systemError(errno, ERROR_LOCATION);
-      error.addProperty("path", projectDir.absolutePath());
+      error.addProperty("path", projectDir.getAbsolutePath());
       LOG_ERROR(error);
    }
 
@@ -206,7 +245,7 @@ SessionScopeState validateSessionScope(const SessionScope& scope,
          return ScopeMissingProject;
 
       // record path to project file
-      *pProjectFilePath = projectPath.absolutePath();
+      *pProjectFilePath = projectPath.getAbsolutePath();
    }
    else
    {
@@ -242,9 +281,10 @@ std::string urlPathForSessionScope(const SessionScope& scope)
 void parseSessionUrl(const std::string& url,
                      SessionScope* pScope,
                      std::string* pUrlPrefix,
-                     std::string* pUrlWithoutPrefix)
+                     std::string* pUrlWithoutPrefix,
+                     std::string* pBaseUrl)
 {
-   static boost::regex re("/s/([A-Fa-f0-9]{5})([A-Fa-f0-9]{8})([A-Fa-f0-9]{8})/");
+   static boost::regex re("/s/([A-Fa-f0-9]{5})([A-Fa-f0-9]{8})([A-Fa-f0-9]{8})(/|$)");
 
    boost::smatch match;
    if (regex_utils::search(url, match, re))
@@ -266,6 +306,11 @@ void parseSessionUrl(const std::string& url,
          *pUrlWithoutPrefix = boost::algorithm::replace_first_copy(
                                    url, std::string(match[0]), "/");
       }
+      if (pBaseUrl)
+      {
+         http::URL urlObj(url.substr(0, url.find(match[0])));
+         *pBaseUrl = urlObj.path();
+      }
    }
    else
    {
@@ -275,9 +320,10 @@ void parseSessionUrl(const std::string& url,
          *pUrlPrefix = std::string();
       if (pUrlWithoutPrefix)
          *pUrlWithoutPrefix = url;
+      if (pBaseUrl)
+         *pBaseUrl = std::string();
    }
 }
-
 
 std::string createSessionUrl(const std::string& hostPageUrl,
                              const SessionScope& scope)
@@ -287,7 +333,7 @@ std::string createSessionUrl(const std::string& hostPageUrl,
 
    // determine the host scope path
    std::string hostScopePath;
-   parseSessionUrl(hostPageUrl, NULL, &hostScopePath, NULL);
+   parseSessionUrl(hostPageUrl, nullptr, &hostScopePath, nullptr);
 
    // if we got a scope path then take everything before
    // it and append our target scope path
@@ -378,10 +424,10 @@ std::string generateScopeId()
    // reserved ids we are using now
    reserved.push_back(kProjectNoneId);
    reserved.push_back(kWorkspacesId);
+   reserved.push_back(kJupyterLabId);
+   reserved.push_back(kJupyterNotebookId);
 
    // a few more for future expansion
-   reserved.push_back("21f2ed72");
-   reserved.push_back("2cb256d2");
    reserved.push_back("3c9ab5a7");
    reserved.push_back("f468a750");
    reserved.push_back("6ae9dc1b");

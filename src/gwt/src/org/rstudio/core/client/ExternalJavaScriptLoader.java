@@ -1,7 +1,7 @@
 /*
  * ExternalJavaScriptLoader.java
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -24,7 +24,7 @@ import java.util.LinkedList;
 
 public class ExternalJavaScriptLoader
 {
-   public static interface Callback
+   public interface Callback
    {
       void onLoaded();
    }

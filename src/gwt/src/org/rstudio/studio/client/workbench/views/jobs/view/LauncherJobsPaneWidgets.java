@@ -1,7 +1,7 @@
 /*
  * LauncherJobsPaneWidgets.java
  *
- * Copyright (C) 2009-19 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -14,6 +14,7 @@
  */
 package org.rstudio.studio.client.workbench.views.jobs.view;
 
+import com.google.gwt.user.client.ui.Label;
 import com.google.gwt.user.client.ui.Widget;
 import com.google.inject.Inject;
 import org.rstudio.core.client.widget.SlidingLayoutPanel;
@@ -32,7 +33,7 @@ public class LauncherJobsPaneWidgets implements JobsPaneOperations
    @Override
    public Widget createMainWidget()
    {
-      return null;
+      return new Label();
    }
    
    @Override

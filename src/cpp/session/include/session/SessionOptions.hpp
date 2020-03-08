@@ -1,7 +1,7 @@
 /*
  * SessionOptions.hpp
  *
- * Copyright (C) 2009-19 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -20,8 +20,8 @@
 
 #include <boost/utility.hpp>
 
-#include <core/SafeConvert.hpp>
-#include <core/FilePath.hpp>
+#include <shared_core/SafeConvert.hpp>
+#include <shared_core/FilePath.hpp>
 #include <core/system/System.hpp>
 #include <core/StringUtils.hpp>
 #include <core/ProgramOptions.hpp>
@@ -239,6 +239,16 @@ public:
    std::string rDocDirOverride()
    {
       return std::string(rDocDirOverride_.c_str());
+   }
+
+   int rRestoreWorkspace()
+   {
+      return rRestoreWorkspace_;
+   }
+
+   int rRunRprofile()
+   {
+      return rRunRprofile_;
    }
    
    std::string defaultRVersion()
@@ -468,7 +478,7 @@ public:
 
    core::FilePath userLogPath() const
    {
-      return userScratchPath().childPath("log");
+      return userScratchPath().completeChildPath("log");
    }
 
    core::FilePath initialWorkingDirOverride()
@@ -600,6 +610,28 @@ public:
       return sessionRsaPrivateKey_;
    }
 
+   bool useSecureCookies() const
+   {
+      return useSecureCookies_;
+   }
+
+   bool restrictDirectoryView() const
+   {
+      return restrictDirectoryView_;
+   }
+   
+   std::string directoryViewWhitelist() const
+   {
+      return directoryViewWhitelist_;
+   }
+
+   std::string envVarSaveBlacklist() const
+   {
+      return envVarSaveBlacklist_;
+   }
+
+   static std::string parseReposConfig(core::FilePath reposFile);
+
 private:
    void resolvePath(const core::FilePath& resourcePath,
                     std::string* pPath);
@@ -613,7 +645,6 @@ private:
    bool validateOverlayOptions(std::string* pErrMsg, std::ostream& osWarnings);
    void resolveOverlayOptions();
    bool allowOverlay() const;
-   std::string parseReposConfig(core::FilePath reposFile);
 
 private:
    // tests
@@ -672,6 +703,10 @@ private:
    int webSocketHandshakeTimeoutMs_;
    bool packageOutputToPackageFolder_;
    std::string terminalPort_;
+   bool useSecureCookies_;
+   bool restrictDirectoryView_;
+   std::string directoryViewWhitelist_;
+   std::string envVarSaveBlacklist_;
 
    // r
    std::string coreRSourcePath_;
@@ -690,6 +725,8 @@ private:
    std::string rDocDirOverride_;
    std::string defaultRVersion_;
    std::string defaultRVersionHome_;
+   int rRestoreWorkspace_;
+   int rRunRprofile_;
    
    // limits
    int limitFileUploadSizeMb_;

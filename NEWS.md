@@ -1,173 +1,166 @@
-## v1.2 - Release Notes
+## v1.3 - Release Notes
 
-### Improved Language Support
+### Accessibility
 
-#### SQL
+* Dramatically improved accessibility for sight-impaired users, including:
+  * Keyboard focus management and visibility upgrades
+  * Improved keyboard navigation
+  * Compatibility with popular screen readers
+  * Compliant contrast ratios and other accessibility improvements
+  * User preference for disabling user-interface animations such as when zooming panes
 
-* Improved autocompletion support in SQL files / chunks
-* Author SQL queries in RStudio and preview in the SQL Results pane
+### Spell Check
 
-#### D3
+* Real-time spell-checking engine for checking while editing
+* Customizable dictionaries and word ignore lists preloaded with common R terms
+* Inline correction suggestions
 
-* Author D3 visualizations in RStudio and preview in the Viewer pane
-* Use [r2d3](https://rstudio.github.io/r2d3/) D3 visualizations in R Notebook chunks
+### Preferences and Configuration
 
-#### Python 
+* All user preferences and settings can now be set using a plain JSON file
+* All user preferences can now have global defaults set by a system administrator
+* New diagnostics commands for editing the prefs file, resetting state, and viewing pref system data
+* Editor themes, snippets, file templates, and keybindings are now portable and can be installed by admins
+* The content of new file templates (New R Script, New R Markdown, etc.) can now be controlled by users or administrators
 
-* Interactive Python REPL embedded in the R console, via `reticulate`
-* Use a shared Python session to execute Python code chunks in R markdown documents
-* Show `matplotlib` plots emitted by Python chunks 
-* Simple bindings to access R objects from Python chunks and vice versa
-* Improved Python script and autocompletion support
+### renv
 
-#### Stan
+* New projects can be initialized with renv, giving them an isolated project environment
 
-* Improved autocompletion support in Stan files / chunks
-* Implemented document outline for Stan files
-* Local Stan workers can now be interrupted
+### Server Security
 
-### Package Improvements
+* New `auth-timeout-minutes` option signs users out after a defined period of inactivity (Pro #667)
+* CSRF hardening improvements including optional validation of the HTTP `Origin` header (Pro #1214)
+* Add option `auth-cookies-force-secure` to always mark auth cookies as secure when SSL is terminated upstream (Pro #995)
+* Set HTTP header `X-Content-Type-Options` to discourage MIME type sniffing (Pro #1219)
+* Authentication cookies are now revoked after signout (Pro #606)
+* File-serving resource endpoints can now be made more restrictive; added new `restrict-directory-view` and `directory-view-whitelist` options (Pro #607)
+* RStudio Server now uses 2048 bit RSA keys, for secure communication of encrypted credentials between server / session and client
 
-#### Testthat
+### iPad OS 13
 
-* *Run Tests* command in [testthat](https://github.com/r-lib/testthat) R scripts for direct running
-* testthat output in the *Build* pane with navigable issue list
-* Integration with [shinytest](https://github.com/rstudio/shinytest) to record and run Shiny app tests
+* Improved keyboard and touch support for iPadOS 13.1
+* Support `Ctrl+[` as Esc key on iPadOS 13.1 keyboards lacking physical Esc key (#4663)
+* Add ability to resize panes using keyboard arrow keys via View / Panes / Adjust Splitter
 
-#### Package Management
+### Terminal Improvements
 
-* Specify a primary CRAN URL and secondary CRAN repos from the package preferences pane.
-* Link to a package's primary CRAN page from the packages pane.
-* Configure CRAN repos with a repos.conf configuration file and the `r-cran-repos-file` option.
-* Suggest additional secondary CRAN repos with the `r-cran-repos-url` option.
+* User preference to configure initial working directory of new terminals (#1557)
+* Command to open a new terminal at location of current editor file
+* Command to insert the full path and filename of current editor file into terminal
+* Command in File pane to open a new terminal at File pane's current location
+* Command in to change terminal to current RStudio working directory (#2363)
+* PowerShell Core option in terminal (Windows-only)
+* Custom terminal shell option for Windows desktop (previously only on Mac, Linux, and server)
+* Change shortcuts for Next/Previous terminal to avoid clash with common Windows shortcuts (#4892)
+* Suppress macOS Catalina message about switching to zsh in Terminal pane (#6182)
+* Add 'Close All Terminals' command to Terminal menu (#3564)
+* Zsh option in terminal for Mac and Linux desktop, and RStudio Server (#5587)
 
-#### Keyring
+### Diagnostics and Recovery
 
-* Store passwords and secrets securely with `keyring` by calling `rstudioapi::askForSecret()`
-* Install `keyring` directly from dialog prompt
+* Add automated crash handling and reporting
+* Show detailed logs and process output when R fails to start (#2097)
+* Add "Safe Mode" for opening sessions without profile scripts or workspace restoration (#4338)
 
-### Plumber
+### Tutorials
 
-* Create [Plumber APIs](https://www.rplumber.io/) in RStudio
-* Execute Plumber APIs within RStudio to view Swagger documentation and make test calls to the APIs
-* Publish Plumber APIs to [RStudio Connect](https://www.rstudio.com/products/connect/)
+* Support for tutorials with the `learnr` package in a new Tutorials pane
 
-### PowerPoint
+### Background Jobs
 
-* Create PowerPoint presentations with R Markdown
+* Add support for running Shiny applications as background jobs (#5190)
+* Install missing package dependencies in a background job (#5584)
 
-### Theming
+### Auto Save
 
-* Support for user-defined editor color schemes
-* Themes now are stored in easily installed, edited, and managed plain-text `.rstheme` files 
-* Import your favorite `.tmtheme` files as RStudio themes
-
-### Jobs
-
-* Run any R script as a background job in a clean R session
-* Monitor progress and see script output in real time
-* Optionally give jobs your global environment when started, and export values back when complete
+* Changes automatically (and optionally) saved to disk after a few seconds or when editor loses focus (#5263)
+* Option to disable real-time backup of unsaved changes to avoid conflicts with Google Drive, Dropbox, etc. (#3837)
+* Option to adjust idle interval for backup or saving changes
 
 ### Miscellaneous
 
-* Subprocesses launched by 'system()' are now interruptible
-* Automatically discover packages used in R code and prompt for installation when missing
-* Git 'Create Branch' dialog defaults to remote associated w/current branch (if any)
-* Variables containing '.' are now highlighted throughout the document when selected (#2094)
-* Added link to purrr cheat sheet (in Help) and link to browse all cheat sheets
-* Added option to temporarily disable environment pane refreshing
-* Improve NSE detection for dplyr (better understands S3 dispatch and idioms)
-* The macOS title bar is now also styled for dark themes (#3365)
-* Add ability to search for displayed database objects in Connections tab (#1549)
-* Add button to open profiler output in an external browser (#1657)
-* Add option to show the R Markdown render command used when knitting (#1658)
-* Add option to show hidden files in the Files pane (#1769)
-* RStudio uses the fontconfig database to list monospace fonts when available (Linux only; #3897)
-* Upgrade embedded Pandoc to 2.6 on Windows (#1807)
-* Allow renames that change only file case on Windows (#1886)
-* Remember scroll position when navigating in Help pane (#1947)
-* Show warning when attempting to edit a generated file (#2082)
-* Remove 4GB limit on Export (download) command in Files pane (#2103)
-* Allow opening .ini files with `file.edit` (#2116)
-* Add `shinymod` snippet for Shiny modules (#2078)
-* Allow changing zoom level without reloading (#2125)
-* New command 'Pull with Rebase' to pull and rebase a branch in a single step (#2151)
-* Click on promises in the Environment pane now calls `force` on the promise
-* Add Rename command to File menu for quick rename of current file (#2199)
-* Numeric filtering in Data Viewer shows histogram/value distribution and supports user-entered values (#2230)
-* Improved support for custom `knitr` engines in R Notebooks (#2401)
-* Add support for viewing external web URLs in the Viewer pane (#2252)
-* Add option to disable drag-and-drop for text in the editor (#2428)
-* Add option to disable cursor save/load; improves performance on some Windows machines (#2778)
-* Add option to turn off knitr chunk background highlighting (#2837)
-* R startup files (e.g. .Rprofile) are now always saved with trailing newlines (#3029)
-* Update embedded libclang to 5.0.2 (Windows only)
-* RStudio now a 64-bit application on Windows (Linux and Mac are already 64-bit)
-* New SSL options for authenticating and publishing to RStudio Connect servers using self-signed certs or internal CAs (#3040)
-* Added option to show whitespace characters for .tsv, .csv files (#3236)
-* The *Source* command can now be customized using magic `!source` comments (#3257)
-* Added linter rule to catch usage of `<-` in some situations where `=` is intended (#3289)
-* Add Sublime Text-style keyboard bindings; contribution from Randy Lai (@randy3k) (#3344)
-* Make it possible to stop a runaway content publishing process (#3787)
-* Update OpenSSL on Windows to 1.0.2p (#3606)
-* Add UTF-8 support in custom login page HTML (#3830)
-* Diagnostics system better understands usage of `.` in magrittr pipes (#3835)
-* Add support for Syntactically Awesome Stylesheets (SASS and SCSS) files (#4040)
+* Add global replace with live preview and regular expression support (#2066)
+* Enable large file uploads (over 4GB) in RStudio Server (#3299)
+* Improved 'Comment / Uncomment' handling of empty lines around selection (#4163)
+* Files with extension '.q' are no longer indexed or parsed as R files (#4696)
+* Add support for an API command to return the list of R packages RStudio depends on (#2332)
+* Upgrade internal JSON parsing engine for speed improvements (#1830)
+* Improved ergonomics for history prefix navigation (#2771)
+* Make columns resizable in the Environment pane (#4020)
+* Add Word Count command (#4237)
+* Keyboard shortcuts for main menu items on RStudio Server (e.g. Ctrl+Alt+F for File menu)
+* Show number of characters when entering version control commit messages (#5192)
+* Update embedded Qt to 5.12.5 for Chromium update, stability and bugfixes (#5399)
+* Add preference for changing font size on help pane (#3282)
+* Warn when Xcode license has not been agreed to on macOS when command line tools required (#5481)
+* Improved browser tab names (project name first, complete product name) (Pro #1172)
+* The diagnostics system now understands referenced symbols in glue strings (#5270)
+* Add preference for compiling .tex files with tinytex (#2788)
+* Long menus and popups now scroll instead of overflowing (#1760, #1794, #2330)
+* Sort package-installed R Markdown templates alphabetically (#4929)
+* The 'Reopen with Encoding' command now saves unsaved changes before re-opening the document. (#5630)
+* Autocomplete support for Plumber `#*` comment keywords (#2220)
+* Automatically continue Plumber `#*` on successive lines (#2219)
+* Comment / uncomment is now enabled for YAML documents (#3317)
+* Reflow comment has been rebound to 'Ctrl + Shift + /' on macOS. (#2443)
+* Allow fuzzy matches in help topic search (#3316)
+* The diagnostics system better handles missing expressions (#5660)
+* Keyboard shortcuts for debugging commands can be customized (#3539)
+* Update Pandoc to 2.7.3 (#4512)
+* Update SumatraPDF to version 3.1.2 (#3155)
+* Allow previewing PDFs in fullscreen mode in Sumatra PDF (#4301)
+* RStudio Server runtime files are stored in `/var/run`, or another configurable location, instead of `/tmp` (#4666)
+* Errors encountered when attempting to find Rtools installations are handled more gracefully (#5720)
+* Enable copying images to the clipboard from the Plots pane (#3142)
+* Update minimum supported browser versions (#5593)
+* Automatic refresh of the Git pane can now be enabled / disabled as required. (#4368)
+* Target directory can be changed from within the 'Upload Files' dialog (RStudio Server)
+* Zoom Left/Right Column commands for keyboard users (#5874)
+* Increase maximum plot size for large, high-DPI displays (#4968; thanks to Jan Gleixner)
+* Make maximum lines in R console configurable; was previously fixed at 1000 (#5919)
+* Option to only show project name instead of full path in desktop window title (#1817)
+* New `rstudio --version` command to return the version of RStudio Desktop (#3922)
+* Scan R Markdown YAML header for R packages required to render document (#4779)
+* Support use of F13 - F24 for custom keyboard shortcuts (full Mac keyboard has F13-F19, for example)
+* Keyboard shortcuts for searching R help in Help pane, and next/previous help page (#5149)
+* Keep keyboard focus in the console during debugging (#6039)
+* Enable wrap-around for previous/next source tab by default (#6139)
+* Provide full SHA in detail of Git commits (#6155)
+* File monitor now ignores Packrat, renv library folders (#3267)
 
-### Bug Fixes
+### Bugfixes
 
-* Fix "Invalid byte sequence" when spell checking
-* Fix incorrect Git status pane display when git detects that a file has been copied
-* Fix hang when submitting empty passwords and password encryption is turned off (#1545)
-* Fix HTTP 500 error when navigating to directories such as /js/ (#1561)
-* Fix issue where Build pane would get 'stuck' on failed Rcpp::compileAttributes() call (#1601)
-* Fix low/no-contrast colors with HTML widgets in notebooks with a dark theme (#1615)
-* Fix invalid YAML in some cases when changing R Markdown output type via dialog (#1609)
-* Fix issue with mis-encoded YAML header when changing R Markdown output type (#1537)
-* Fix error when quitting while a function named `q()` is present (#1647)
-* Fix crash when executing multiple R Notebook chunks with a failing Rcpp chunk (#1668)
-* Fix missing blank lines in code chunks in R Notebook preview (#1556)
-* Fix selection in Files pane when files are modified while checked (#1715)
-* Fix incorrect truncation of some R object descriptions in Environment pane (#1703)
-* Fix duplicate prompts in each window when using RStudio API `showPrompt` (#1706)
-* Fix proxy timeouts with the websocket used for the Terminal, via keepalive messages (#1860)
-* Fix RStudio hang when installing packages (e.g. BH) in Packrat projects on Windows (#1864)
-* Fix `file.edit` failures with Chinese filenames on Windows (#1868)
-* Fix hang on opening Global Options when many fonts are installed (#1889)
-* Fix errors when importing non-ASCII filenames in base Import Dataset (#1910)
-* Fix `rserver` crash that can occur when proxying websockets to Shiny apps (#2061)
-* Fix hang on some Linux systems caused by X11 clipboard monitoring w/ option to disable monitoring (#2068)
-* Fix empty column titles when viewing matrices without column names (#2086)
-* Fix error when pressing F1 on non-function autocomplete results (#2127)
-* Fix hang when autocompleting filenames in large directories (#2236)
-* Fix inability to copy content from Viewer pane and Data Viewer in IE11 (#2351)
-* Fix performance regression when viewing large datasets in Data Viewer (#3887)
-* Fix errant addition of `msys-ssh` to path on non-Windows platforms (#2352)
-* Fix buggy behavior with \r when ANSI colors are present (#2387)
-* Fix external process slowness (git, etc.) when open file limit `RLIMIT_NOFILE` is high (#2470)
-* Fix issue caused by resolving symlinks when choosing Git path (#2476)
-* Fix display of consecutive spaces in the Data Viewer (#2499)
-* Fix issue where '#' in YAML strings would be highlighted as comments (#2591)
-* Fix over-eager loading of `yaml` package when IDE starts up (#2602)
-* Fix issue on Windows with R dialogs showing behind RStudio window (#2901)
-* Fix incorrect insertion of mousewheel handler into HTML widget JavaScript (#2634)
-* Fix unresponsive buttons in Connections pane when connection deletion is cancelled (#2644)
-* Fix incorrect NEWS links in Packages pane (#3082)
-* Fix encoding issue with snippets containing non-ASCII text (#3111)
-* Fix persistence of Evaluate Chunks in Directory global option (#3356)
-* Fix file.choose(new = TRUE) to properly request new file name (#3903)
-* Fix 'Copy Plot to Clipboard' functionality when IDE is zoomed (#3853)
-* Fix early evaluation of `ALTREP` objects (#4171)
+* Fix issue where calling `install.packages()` without arguments would fail (#5154)
+* Fix issue where C code in packages would incorrectly be diagnosed as C++ (#5418)
+* Fix plot history when plot() called immediately after dev.off() (#3117)
+* Fix debug stopping past breakpoint when source windows are open (#3683)
+* Fix diagnostics error with multibyte characters in R Markdown documents on Windows (#1866)
+* Fix stale processes when invoking child R processes with large command lines (#3414)
+* Fix an issue where help tooltips could become corrupt when using prettycode (#5561)
+* Fix an issue where signature tooltips were shown even when disabled by user preference (#5405)
+* Fix an issue where Git did not work within projects whose paths contained multibyte characters (#2194)
+* Fix an issue where RStudio would fail to preview self-contained bookdown books (#5371)
+* Fix modal dialog boundaries extending out of the app window in certain cases (#1605)
+* Fix issue where session restore could fail when using multiple user libraries
+* Fix issue where library paths were not forwarded when building package documentation
+* Restore ability to select and copy text in version control diffs (#4734)
+* Fix incorrect column names when non-dataframes with a column named `x` were viewed (#3304)
+* Fix inconsistent shading in R Markdown chunk backgrounds with folding (#2992)
+* Fix list column display in columns past 50 with data viewer (#5851)
+* Fix incorrect column type display when paging columns (#5479)
+* Fix incorrect sorting in data viewer when paging columns (#4682)
+* Fix carryover of light ANSI background colors (#6092)
+* Fix issue where Shiny applications using `reticulate` on Windows could crash on run (#6140)
+* Fix issue where pasting text into last chunk in document could occasionally cause hang (#6226)
 
-### RStudio Server Pro
+### RStudio Professional
 
-* Overhauled R versions, allowing you to specify version labels, load environment modules, and execute a prelaunch script when loading specific versions.
-* New rsession-diagnostics-enabled option for rserver.conf to enable session launch diagnostics mode to help diagnose session launch failures.
-* Added support for auth-pam-sessions-use-password option in a load balanced setup.
-* Added ability to suspend sessions from user home page.
-* Added hmac signature verification for proxy auth mode with new auth-proxy-require-hmac option in rserver.conf.
-* Add nodes to RStudio Server Pro load-balanced clusters without service interruptions.
-
-### RStudio Pro Drivers
-
-* Discover, install and uninstall RStudio Pro Drivers from the New Connection wizard.
+* Logging improvements; log destinations and levels are more configurable and can be changed in real time
+* RStudio Desktop Pro can now function as a client for RStudio Server Pro
+* New tools for viewing and managing server users when using named user licensing
+* Floating licensing can now pass through an HTTPS proxy
+* The Launcher service now starts and runs automatically when the system starts
+* New Kubernetes Launcher plugin feature to modify the generated job/pod specs (#1353)
+* When containers are created when running RStudio Launcher sessions, user home directories are propagated to the container instead of requiring the home directories to be mounted at `/home`. This is a potentially breaking change, and will requiring updating the `/etc/rstudio/laucher-mounts` file to mount the home directory to the correct location (#1369)
+* New Kubernetes Launcher plugin feature to allow the specification of a `requests` limit to allow for oversubscription of Kubernetes resources (#1360)

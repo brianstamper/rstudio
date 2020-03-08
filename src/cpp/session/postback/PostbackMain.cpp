@@ -1,7 +1,7 @@
 /*
  * PostbackMain.cpp
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -20,11 +20,12 @@
 
 #include <iostream>
 
-#include <core/Error.hpp>
-#include <core/FilePath.hpp>
+#include <shared_core/Error.hpp>
+#include <core/CrashHandler.hpp>
+#include <shared_core/FilePath.hpp>
 #include <core/Log.hpp>
 #include <core/ProgramStatus.hpp>
-#include <core/SafeConvert.hpp>
+#include <shared_core/SafeConvert.hpp>
 
 #include <core/system/System.hpp>
 
@@ -52,10 +53,21 @@ int main(int argc, char * const argv[])
    try
    {
       // initialize log
-      initializeSystemLog("rpostback", core::system::kLogLevelWarning);
+      core::log::setProgramId("rpostback");
+      core::system::initializeSystemLog("rpostback", core::log::LogLevel::WARN);
 
       // ignore SIGPIPE
       Error error = core::system::ignoreSignal(core::system::SigPipe);
+      if (error)
+         LOG_ERROR(error);
+
+      // catch unhandled exceptions
+      core::crash_handler::ProgramMode programMode =
+            (core::system::getenv(kRStudioProgramMode) == kSessionProgramModeDesktop ?
+                core::crash_handler::ProgramMode::Desktop :
+                core::crash_handler::ProgramMode::Server);
+
+      error = core::crash_handler::initialize(programMode);
       if (error)
          LOG_ERROR(error);
 

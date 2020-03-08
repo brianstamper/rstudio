@@ -1,7 +1,7 @@
 /*
  * TestThat.hpp
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -22,7 +22,7 @@
 
 # ifndef RSTUDIO_NO_TESTTHAT_ALIASES
 
-#  define context(__X__, ...) TEST_CASE(__X__, __FILE__)
+#  define test_context(__X__, ...) TEST_CASE(__X__, __FILE__)
 #  define test_that SECTION
 #  define expect_true(x) CHECK((x))
 #  define expect_false(x) CHECK_FALSE((x))
@@ -34,7 +34,7 @@
 
 # ifndef RSTUDIO_NO_TESTTHAT_ALIASES
 
-#  define context(__X__, ...) void RSTUDIO_UNIT_TESTS_DISABLED_##__LINE__()
+#  define test_context(__X__, ...) void RSTUDIO_UNIT_TESTS_DISABLED_##__LINE__()
 #  define test_that(__X__) if (false)
 #  define expect_true(__X__)
 #  define expect_false(__X__)

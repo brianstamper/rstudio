@@ -1,7 +1,7 @@
 /*
  * VersionTests.cpp
  *
- * Copyright (C) 2009-17 by RStudio, Inc.
+ * Copyright (C) 2009-17 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -38,7 +38,7 @@ void compareVersionEqual(const std::string& lhs, const std::string& rhs)
    expect_true(Version(lhs) == Version(rhs));
 }
 
-context("Version")
+test_context("Version")
 {
    test_that("Various versions are compared correctly")
    {

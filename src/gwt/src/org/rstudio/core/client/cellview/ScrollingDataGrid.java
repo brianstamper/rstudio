@@ -1,7 +1,7 @@
 /*
  * ScrollingDataGrid.java
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -15,7 +15,8 @@
 
 package org.rstudio.core.client.cellview;
 
-import com.google.gwt.user.cellview.client.DataGrid;
+import org.rstudio.core.client.widget.RStudioDataGrid;
+
 import com.google.gwt.user.client.ui.HeaderPanel;
 import com.google.gwt.user.client.ui.ScrollPanel;
 import com.google.gwt.view.client.ProvidesKey;
@@ -23,7 +24,7 @@ import com.google.gwt.view.client.ProvidesKey;
 // this class extends GWT's DataGrid with a single method that gives us access
 // to the scrolling panel used by the grid, which we need in order to
 // manipulate the scroll position directly (e.g. to save and restore it)
-public class ScrollingDataGrid<T> extends DataGrid<T>
+public class ScrollingDataGrid<T> extends RStudioDataGrid<T>
 {
    public ScrollingDataGrid(int pageSize, ProvidesKey<T> keyProvider)
    {

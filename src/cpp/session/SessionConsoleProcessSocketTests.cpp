@@ -1,7 +1,7 @@
 /*
  * SessionConsoleProcessSocketTests.cpp
  *
- * Copyright (C) 2009-18 by RStudio, Inc.
+ * Copyright (C) 2009-18 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -339,7 +339,7 @@ private:
 
 } // anonymous namespace
 
-context("websocket for interactive terminals")
+test_context("websocket for interactive terminals")
 {
    const std::string handle1 = "abcd";
    const std::string handle2 = "defg";

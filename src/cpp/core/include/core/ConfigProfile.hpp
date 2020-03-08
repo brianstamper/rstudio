@@ -1,7 +1,7 @@
 /*
  * ConfigProfile.hpp
  *
- * Copyright (C) 2018 by RStudio, Inc.
+ * Copyright (C) 2018 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -22,7 +22,7 @@
 #include <boost/function.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include <core/Error.hpp>
+#include <shared_core/Error.hpp>
 
 namespace rstudio {
 namespace core {
@@ -84,6 +84,10 @@ public:
 
    core::Error parseString(const std::string& profileStr);
 
+   // gets the names defined for a particular level in the configuration file
+   // must only be called after a call to load()
+   std::vector<std::string> getLevelNames(uint32_t level) const;
+
    // gets a param's value given the level values for each level
    // see unit tests for more examples
    template <typename T>
@@ -134,7 +138,6 @@ public:
 
       return Success();
    }
-
 
 private:
    typedef std::map<std::string, boost::any> DefaultParamValuesMap;

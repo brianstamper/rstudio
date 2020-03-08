@@ -1,7 +1,7 @@
 /*
  * RClientState.cpp
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -21,8 +21,8 @@
 #include <boost/function.hpp>
 
 #include <core/Log.hpp>
-#include <core/Error.hpp>
-#include <core/FilePath.hpp>
+#include <shared_core/Error.hpp>
+#include <shared_core/FilePath.hpp>
 #include <core/FileSerializer.hpp>
 
 using namespace rstudio::core;
@@ -38,31 +38,39 @@ const char * const kPersistentExt = ".persistent";
 const char * const kProjPersistentExt = ".pper";
    
 void putState(const std::string& scope, 
-              const json::Object::value_type& entry,
+              const std::string& entryName,
+              const json::Value& entryValue,
               json::Object* pStateContainer)
 {
    // get the scope object (create if it doesn't exist)
-   json::Object::iterator pos = pStateContainer->find(scope);
+   json::Object::Iterator pos = pStateContainer->find(scope);
    if (pos == pStateContainer->end())
    {
       json::Object newScopeObject;
-      pStateContainer->insert(std::make_pair(scope, newScopeObject));
+      pStateContainer->insert(scope, newScopeObject);
    }
-   json::Value& scopeValue = pStateContainer->operator[](scope); 
-   json::Object& scopeObject = scopeValue.get_obj();
+   const json::Value& scopeValue = pStateContainer->operator[](scope);
+   json::Object scopeObject = scopeValue.getObject();
    
    // insert the value into the scope
-   scopeObject[entry.first] = entry.second;
+   scopeObject.insert(entryName, entryValue);
+}
+
+void putState(const std::string& scope,
+              const json::Object::Member& entry,
+              json::Object* pStateContainer)
+{
+   putState(scope, entry.getName(), entry.getValue(), pStateContainer);
 }
    
-void mergeStateScope(const json::Object::value_type& scopePair,
+void mergeStateScope(const json::Object::Member& scopeMember,
                      json::Object* pTargetState)
 {
-   const std::string& scope = scopePair.first;
-   const json::Value& value = scopePair.second;
-   if ( value.type() == json::ObjectType )
+   const std::string& scope = scopeMember.getName();
+   const json::Value& value = scopeMember.getValue();
+   if ( value.isObject() )
    {
-      const json::Object& stateObject = value.get_obj();
+      const json::Object& stateObject = value.getObject();
       std::for_each(stateObject.begin(),
                     stateObject.end(),
                     boost::bind(putState, scope, _1, pTargetState));
@@ -86,15 +94,14 @@ void commitState(const json::Object& stateContainer,
                  const std::string& fileExt,
                  const core::FilePath& stateDir)
 {
-   for (json::Object::const_iterator
-        it = stateContainer.begin(); it != stateContainer.end(); ++it)
+   for (const json::Object::Member& member : stateContainer)
    {
       // generate json
       std::ostringstream ostr ;
-      json::writeFormatted(it->second, ostr);
+      member.getValue().writeFormatted(ostr);
       
       // write to file
-      FilePath stateFile = stateDir.complete(it->first + fileExt);
+      FilePath stateFile = stateDir.completePath(member.getName() + fileExt);
       Error error = writeStringToFile(stateFile, ostr.str());
       if (error)
          LOG_ERROR(error);   
@@ -115,14 +122,14 @@ void restoreState(const core::FilePath& stateFilePath,
    
    // parse the json
    json::Value value;
-   if ( !json::parse(contents, &value) )
+   if ( value.parse(contents) )
    {
       LOG_ERROR_MESSAGE("Error parsing client state");
       return;
    }
    
    // write to the container 
-   pStateContainer->insert(std::make_pair(stateFilePath.stem(), value));
+   pStateContainer->insert(stateFilePath.getStem(), value);
 }
 
 Error removeAndRecreateStateDir(const FilePath& stateDir)
@@ -142,7 +149,7 @@ Error restoreStateFiles(const FilePath& sourceDir,
 
    // list the files
    std::vector<FilePath> childPaths ;
-   Error error = sourceDir.children(&childPaths);
+   Error error = sourceDir.getChildren(childPaths);
    if (error)
       return error ;
 
@@ -155,14 +162,12 @@ void appendAndValidateState(const json::Object& sourceState,
                             json::Object* pTargetState)
 {
    // append (log warning if there are dupes)
-   for (json::Object::const_iterator it = sourceState.begin();
-        it != sourceState.end();
-        ++it)
+   for (const json::Object::Member& member : sourceState)
    {
-      if (pTargetState->find(it->first) != pTargetState->end())
-         LOG_WARNING_MESSAGE("duplicate state key: " + it->first);
+      if (pTargetState->find(member.getName()) != pTargetState->end())
+         LOG_WARNING_MESSAGE("duplicate state key: " + member.getName());
       else
-         pTargetState->insert(*it);
+         pTargetState->insert(member);
    }
 }
 
@@ -183,15 +188,15 @@ ClientState::ClientState()
 
 void ClientState::restoreGlobalState(const FilePath& stateFile)
 {
-   if (stateFile.extension() == kTemporaryExt)
+   if (stateFile.getExtension() == kTemporaryExt)
       restoreState(stateFile, &temporaryState_);
-   else if (stateFile.extension() == kPersistentExt)
+   else if (stateFile.getExtension() == kPersistentExt)
       restoreState(stateFile, &persistentState_);
 }
 
 void ClientState::restoreProjectState(const FilePath& stateFile)
 {
-   if (stateFile.extension() == kProjPersistentExt)
+   if (stateFile.getExtension() == kProjPersistentExt)
       restoreState(stateFile, &projectPersistentState_);
 }
    
@@ -207,7 +212,7 @@ void ClientState::putTemporary(const std::string& scope,
                                const json::Value& value)
 {
    json::Object stateContainer ;
-   putState(scope, std::make_pair(name, value), &stateContainer);
+   putState(scope, name, value, &stateContainer);
    putTemporary(stateContainer);
 }
    
@@ -221,7 +226,7 @@ void ClientState::putPersistent(const std::string& scope,
                                 const json::Value& value)
 {
    json::Object stateContainer;
-   putState(scope, std::make_pair(name, value), &stateContainer);
+   putState(scope, name, value, &stateContainer);
    putPersistent(stateContainer);
 }
 
@@ -235,24 +240,24 @@ void ClientState::putProjectPersistent(const std::string& scope,
                                        const json::Value& value)
 {
    json::Object stateContainer;
-   putState(scope, std::make_pair(name, value), &stateContainer);
+   putState(scope, name, value, &stateContainer);
    putProjectPersistent(stateContainer);
 }
 
 json::Value ClientState::getProjectPersistent(std::string scope,
                                               std::string name)
 {
-   json::Object::iterator i = projectPersistentState_.find(scope);
+   json::Object::Iterator i = projectPersistentState_.find(scope);
    if (i == projectPersistentState_.end())
    {
       return json::Value();
    }
    else
    {
-      if (!json::isType<core::json::Object>(i->second))
+      if (!json::isType<core::json::Object>((*i).getValue()))
          return json::Value();
-      json::Object& scopeObject = (i->second).get_obj();
-      return scopeObject[name];
+      json::Object scopeObject = (*i).getValue().getObject();
+      return scopeObject[name].clone();
    }
 }
 
@@ -312,7 +317,7 @@ void ClientState::currentState(json::Object* pCurrentState) const
 {
    // start with copy of persistent state
    pCurrentState->clear();
-   pCurrentState->insert(persistentState_.begin(), persistentState_.end());
+   *pCurrentState = persistentState_;
    
    // add and validate other state collections
    appendAndValidateState(projectPersistentState_, pCurrentState);

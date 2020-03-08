@@ -1,7 +1,7 @@
 /*
  * WorkbenchServerOperations.java
  *
- * Copyright (C) 2009-17 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -30,19 +30,18 @@ import org.rstudio.studio.client.common.vcs.SVNServerOperations;
 import org.rstudio.studio.client.packrat.model.PackratServerOperations;
 import org.rstudio.studio.client.projects.model.ProjectTemplateServerOperations;
 import org.rstudio.studio.client.projects.model.ProjectsServerOperations;
+import org.rstudio.studio.client.renv.model.RenvServerOperations;
 import org.rstudio.studio.client.rmarkdown.model.RMarkdownServerOperations;
 import org.rstudio.studio.client.server.ServerRequestCallback;
 import org.rstudio.studio.client.server.Void;
 import org.rstudio.studio.client.workbench.addins.AddinsServerOperations;
 import org.rstudio.studio.client.workbench.codesearch.model.CodeSearchServerOperations;
 import org.rstudio.studio.client.workbench.prefs.model.PrefsServerOperations;
-import org.rstudio.studio.client.workbench.prefs.model.RPrefs;
 import org.rstudio.studio.client.workbench.snippets.SnippetServerOperations;
 import org.rstudio.studio.client.workbench.views.buildtools.model.BuildServerOperations;
 import org.rstudio.studio.client.workbench.views.choosefile.model.ChooseFileServerOperations;
 import org.rstudio.studio.client.workbench.views.connections.model.ConnectionsServerOperations;
 import org.rstudio.studio.client.workbench.views.console.model.ConsoleServerOperations;
-import org.rstudio.studio.client.workbench.views.data.model.DataServerOperations;
 import org.rstudio.studio.client.workbench.views.edit.model.EditServerOperations;
 import org.rstudio.studio.client.workbench.views.environment.dataimport.model.DataImportServerOperations;
 import org.rstudio.studio.client.workbench.views.environment.model.EnvironmentServerOperations;
@@ -59,6 +58,7 @@ import org.rstudio.studio.client.workbench.views.source.editors.profiler.model.P
 import org.rstudio.studio.client.workbench.views.source.editors.text.themes.model.ThemeServerOperations;
 import org.rstudio.studio.client.workbench.views.source.model.SourceServerOperations;
 import org.rstudio.studio.client.workbench.views.terminal.TerminalShellInfo;
+import org.rstudio.studio.client.workbench.views.tutorial.TutorialServerOperations;
 import org.rstudio.studio.client.workbench.views.viewer.model.ViewerServerOperations;
 import org.rstudio.studio.client.workbench.views.jobs.model.JobsServerOperations;
 
@@ -72,7 +72,6 @@ public interface WorkbenchServerOperations extends ConsoleServerOperations,
                                                    PlotsServerOperations,
                                                    EditServerOperations,
                                                    SourceServerOperations,
-                                                   DataServerOperations,
                                                    ChooseFileServerOperations,
                                                    HistoryServerOperations,
                                                    MirrorsServerOperations,
@@ -98,6 +97,7 @@ public interface WorkbenchServerOperations extends ConsoleServerOperations,
                                                    RMarkdownServerOperations,
                                                    DependencyServerOperations,
                                                    PackratServerOperations,
+                                                   RenvServerOperations,
                                                    MarkersServerOperations,
                                                    LintServerOperations,
                                                    RoxygenServerOperations,
@@ -107,7 +107,8 @@ public interface WorkbenchServerOperations extends ConsoleServerOperations,
                                                    ConnectionsServerOperations,
                                                    JobsServerOperations,
                                                    SecondaryReposServerOperations,
-                                                   ThemeServerOperations
+                                                   ThemeServerOperations,
+                                                   TutorialServerOperations
 {   
    void initializeForMainWorkbench();
    void disconnect();
@@ -115,8 +116,6 @@ public interface WorkbenchServerOperations extends ConsoleServerOperations,
    void setWorkbenchMetrics(WorkbenchMetrics clientMetrics,
                             ServerRequestCallback<Void> requestCallback);
    
-   void getRPrefs(ServerRequestCallback<RPrefs> requestCallback);
- 
    void updateClientState(JavaScriptObject temporary,
                           JavaScriptObject persistent,
                           JavaScriptObject projectPersistent,
@@ -153,4 +152,6 @@ public interface WorkbenchServerOperations extends ConsoleServerOperations,
                       ServerRequestCallback<ConsoleProcess> requestCallback);
    
    void executeCode(String code, ServerRequestCallback<Void> requestCallback);
+
+   void setUserCrashHandlerPrompted(boolean enableCrashHandling, ServerRequestCallback<Void> requestCallback);
 }

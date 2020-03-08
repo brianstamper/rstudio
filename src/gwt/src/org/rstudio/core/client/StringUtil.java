@@ -1,7 +1,7 @@
 /*
  * StringUtil.java
  *
- * Copyright (C) 2009-18 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -1373,6 +1373,70 @@ public class StringUtil
             return "\\" + m.getValue();
          }
       });
+   }
+   
+   /**
+    * Checks if a character is at a given position in a string. Will not throw an exception
+    * if attempting to look at an invalid index, or if the input string is null.
+    * @param str String to examine
+    * @param ch Character to find at given position
+    * @param pos Position to check
+    * @return true if ch is found at pos in str
+    */
+   public static boolean isCharAt(String str, char ch, int pos)
+   {
+      if (isNullOrEmpty(str))
+         return false;
+      
+      if (pos < 0 || pos >= str.length())
+         return false;
+      
+      return str.charAt(pos) == ch;
+   }
+
+   /**
+    * Prior to GWT 2.8.2, the String.charAt method was not range-checked and would not
+    * throw exceptions when invoked with an out-of-range position. We have code that assumes
+    * this old behavior.
+    * 
+    * Starting with 2.8.2 it will throw StringIndexOutOfBoundsException per Java standard.
+    * In cases where it's not obvious how to safely switch to the new behavior, this method
+    * can be substituted.
+    */
+   public static char charAt(String str, int pos)
+   {
+      if (pos < 0 || pos >= str.length())
+         return '\0';
+      
+      return str.charAt(pos);
+   }
+
+   /**
+    * Convert a string "foo" to "f o o"
+    * @param str
+    * @return
+    */
+   public static native String spacedString(String str) /*-{
+      return str.split('').join(' ');
+   }-*/;
+
+   public static String format(String fmt, Object... objects)
+   {
+      List<String> strings = new ArrayList<String>();
+      for (Object object : objects)
+      {
+         strings.add(object.toString());
+      }
+      
+      String result = fmt;
+      for (int i = 0; i < strings.size(); i += 2)
+      {
+         String target = "{" + strings.get(i) + "}";
+         String replacement = strings.get(i + 1);
+         result = result.replace(target, replacement);
+      }
+      
+      return result;
    }
    
    private static final NumberFormat FORMAT = NumberFormat.getFormat("0.#");

@@ -7,7 +7,7 @@ properties([
                               daysToKeepStr: '',
                               numToKeepStr: '100')),
     parameters([string(name: 'RSTUDIO_VERSION_MAJOR', defaultValue: '1', description: 'RStudio Major Version'),
-                string(name: 'RSTUDIO_VERSION_MINOR', defaultValue: '2', description: 'RStudio Minor Version'),
+                string(name: 'RSTUDIO_VERSION_MINOR', defaultValue: '3', description: 'RStudio Minor Version'),
                 string(name: 'SLACK_CHANNEL', defaultValue: '#ide-builds', description: 'Slack channel to publish build message.'),
                 string(name: 'OS_FILTER', defaultValue: '', description: 'Pattern to limit builds by matching OS'),
                 string(name: 'ARCH_FILTER', defaultValue: '', description: 'Pattern to limit builds by matching ARCH'),
@@ -15,7 +15,7 @@ properties([
                 ])
 ])
 
-def compile_package(type, flavor, variant) {
+def compile_package(os, type, flavor, variant) {
   // start with major, minor, and patch versions
   def env = "RSTUDIO_VERSION_MAJOR=${rstudioVersionMajor} RSTUDIO_VERSION_MINOR=${rstudioVersionMinor} RSTUDIO_VERSION_PATCH=${rstudioVersionPatch}"
 
@@ -23,6 +23,9 @@ def compile_package(type, flavor, variant) {
   if (rstudioVersionSuffix != 0) {
    env = "${env} RSTUDIO_VERSION_SUFFIX=${rstudioVersionSuffix}" 
   }
+
+  // add OS that the package was built for
+  env = "${env} PACKAGE_OS=\"${os}\""
 
   // currently our nodes have access to 4 cores, so spread out the compile job
   // a little (currently using up all 4 cores causes problems)
@@ -47,14 +50,14 @@ def run_tests(type, flavor, variant) {
     currentBuild.result = "UNSTABLE"
   }
 
-  /*
+  
   try {
     // attempt to run cpp unit tests
-    sh "cd package/linux/build-${flavor.capitalize()}-${type}/src/cpp && ./rstudio-tests"
+    // disable known broken tests for now (Jenkins cannot handle the parallel load these induce)
+    sh "cd package/linux/build-${flavor.capitalize()}-${type}/src/cpp && ./rstudio-tests --scope core"
   } catch(err) {
     currentBuild.result = "UNSTABLE"
   }
-  */
 }
 
 def s3_upload(type, flavor, os, arch) {
@@ -65,6 +68,15 @@ def s3_upload(type, flavor, os, arch) {
     returnStdout: true
   ).trim()
 
+  // rename package to not include the build type
+  def renamedFile = sh (
+    script: "echo ${packageFile} | sed 's/-relwithdebinfo//'",
+    returnStdout: true
+  ).trim()
+
+  sh "mv ${buildFolder}/${packageFile} ${buildFolder}/${renamedFile}"
+  packageFile = renamedFile
+
   // copy installer to s3
   sh "aws s3 cp ${buildFolder}/${packageFile} s3://rstudio-ide-build/${flavor}/${os}/${arch}/"
 
@@ -73,8 +85,16 @@ def s3_upload(type, flavor, os, arch) {
       sh "aws s3 cp ${buildFolder}/_CPack_Packages/Linux/${type}/*.tar.gz s3://rstudio-ide-build/${flavor}/${os}/${arch}/"
   }
 
-  withCredentials([file(credentialsId: 'www-rstudio-org-pem', variable: 'wwwRstudioOrgPem')]) {
-    sh "docker/jenkins/publish-daily-binary.sh https://s3.amazonaws.com/rstudio-ide-build/${flavor}/${os}/${arch}/${packageFile} ${wwwRstudioOrgPem}"
+  // update daily build redirect; currently disabled for 1.3
+  // 
+  // withCredentials([file(credentialsId: 'www-rstudio-org-pem', variable: 'wwwRstudioOrgPem')]) {
+  //   sh "docker/jenkins/publish-daily-binary.sh https://s3.amazonaws.com/rstudio-ide-build/${flavor}/${os}/${arch}/${packageFile} ${wwwRstudioOrgPem}"
+  // }
+}
+
+def sentry_upload(type, flavor) {
+  withCredentials([string(credentialsId: 'ide-sentry-api-key', variable: 'SENTRY_API_KEY')]){
+    sh "cd package/linux/build-${flavor.capitalize()}-${type}/src/cpp && /usr/local/bin/sentry-cli --auth-token ${SENTRY_API_KEY} upload-dif --org rstudio --project ide-backend -t elf ."
   }
 }
 
@@ -88,7 +108,7 @@ def get_type_from_os(os) {
   def type
   // groovy switch case regex is broken in pipeline
   // https://issues.jenkins-ci.org/browse/JENKINS-37214
-  if (os.contains('centos') || os.contains('suse')) {
+  if (os.contains('centos') || os.contains('suse') || os.contains('fedora')) {
     type = 'RPM'
   } else {
     type = 'DEB'
@@ -137,25 +157,28 @@ messagePrefix = "Jenkins ${env.JOB_NAME} build: <${env.BUILD_URL}display/redirec
 try {
     timestamps {
         def containers = [
-          [os: 'centos6',    arch: 'x86_64', flavor: 'server',  variant: ''],
-          [os: 'opensuse',   arch: 'x86_64', flavor: 'server',  variant: ''],
-          [os: 'opensuse',   arch: 'x86_64', flavor: 'desktop', variant: ''],
-          [os: 'opensuse15', arch: 'x86_64', flavor: 'desktop', variant: ''],
-          [os: 'opensuse15', arch: 'x86_64', flavor: 'server',  variant: ''],
-          [os: 'centos7',    arch: 'x86_64', flavor: 'desktop', variant: ''],
-          [os: 'trusty',     arch: 'amd64',  flavor: 'server',  variant: ''],
-          [os: 'trusty',     arch: 'amd64',  flavor: 'desktop', variant: ''],
-          [os: 'xenial',     arch: 'amd64',  flavor: 'desktop', variant: ''],
-          [os: 'bionic',     arch: 'amd64',  flavor: 'server',  variant: ''],
-          [os: 'bionic',     arch: 'amd64',  flavor: 'desktop', variant: ''],
-          [os: 'debian9',    arch: 'x86_64', flavor: 'server',  variant: ''],
-          [os: 'debian9',    arch: 'x86_64', flavor: 'desktop', variant: '']
+          [os: 'centos6',    arch: 'x86_64', flavor: 'server',  variant: '',    package_os: 'CentOS 6'],
+          [os: 'opensuse',   arch: 'x86_64', flavor: 'server',  variant: '',    package_os: 'OpenSUSE'],
+          [os: 'opensuse',   arch: 'x86_64', flavor: 'desktop', variant: '',    package_os: 'OpenSUSE'],
+          [os: 'opensuse15', arch: 'x86_64', flavor: 'desktop', variant: '',    package_os: 'OpenSUSE 15'],
+          [os: 'opensuse15', arch: 'x86_64', flavor: 'server',  variant: '',    package_os: 'OpenSUSE 15'],
+          [os: 'centos7',    arch: 'x86_64', flavor: 'desktop', variant: '',    package_os: 'CentOS 7'],
+          [os: 'xenial',     arch: 'amd64',  flavor: 'server',  variant: '',    package_os: 'Ubuntu Xenial'],
+          [os: 'xenial',     arch: 'amd64',  flavor: 'desktop', variant: '',    package_os: 'Ubuntu Xenial'],
+          [os: 'bionic',     arch: 'amd64',  flavor: 'server',  variant: '',    package_os: 'Ubuntu Bionic'],
+          [os: 'bionic',     arch: 'amd64',  flavor: 'desktop', variant: '',    package_os: 'Ubuntu Bionic'],
+          [os: 'debian9',    arch: 'x86_64', flavor: 'server',  variant: '',    package_os: 'Debian 9'],
+          [os: 'debian9',    arch: 'x86_64', flavor: 'desktop', variant: '',    package_os: 'Debian 9'],
+          [os: 'centos8',   arch: 'x86_64', flavor: 'server',  variant: '',     package_os: 'CentOS 8'],
+          [os: 'centos8',   arch: 'x86_64', flavor: 'desktop', variant: '',     package_os: 'CentOS 8']
         ]
         containers = limit_builds(containers)
+
         // create the version we're about to build
         node('docker') {
             stage('set up versioning') {
                 prepareWorkspace()
+
                 container = pullBuildPush(image_name: 'jenkins/ide', dockerfile: "docker/jenkins/Dockerfile.versioning", image_tag: "rstudio-versioning", build_args: jenkins_user_build_args())
                 container.inside() {
                     stage('bump version') {
@@ -185,8 +208,34 @@ try {
             }
         }
 
-        // launch jenkins agents to support the container scale!
-        spotScaleSwarm layer_name: 'swarm-ide', instance_count: containers.size(), duration_seconds: 7000
+        // build each container image
+        parallel_images = [:]
+        for (int i = 0; i < containers.size(); i++) {
+            // derive the tag for this image
+            def current_image = containers[i]
+            def image_tag = "${current_image.os}-${current_image.arch}-${params.RSTUDIO_VERSION_MAJOR}.${params.RSTUDIO_VERSION_MINOR}"
+
+            // ensure that this image tag has not already been built (since we
+            // recycle tags for many platforms to e.g. build desktop and server
+            // on the same image)
+            if (!parallel_images.keySet().contains(image_tag)) {
+                parallel_images[image_tag] = {
+                    node('docker') {
+                        stage('prepare container') {
+                            prepareWorkspace()
+                            withCredentials([usernameColonPassword(credentialsId: 'github-rstudio-jenkins', variable: "github_login")]) {
+                              def github_args = "--build-arg GITHUB_LOGIN=${github_login}"
+                              pullBuildPush(image_name: 'jenkins/ide', 
+                                dockerfile: "docker/jenkins/Dockerfile.${current_image.os}-${current_image.arch}", 
+                                image_tag: image_tag, 
+                                build_args: github_args + " " + jenkins_user_build_args())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        parallel parallel_images
 
         // build each variant in parallel
         def parallel_containers = [:]
@@ -195,20 +244,23 @@ try {
             parallel_containers["${containers[i].os}-${containers[i].arch}-${containers[i].flavor}-${containers[i].variant}"] = {
                 def current_container = containers[index]
                 node('ide') {
-                    stage('prepare ws/container'){
-                      prepareWorkspace()
-                      def image_tag = "${current_container.os}-${current_container.arch}-${params.RSTUDIO_VERSION_MAJOR}.${params.RSTUDIO_VERSION_MINOR}"
-                      withCredentials([usernameColonPassword(credentialsId: 'github-rstudio-jenkins', variable: "github_login")]) {
-                          def github_args = "--build-arg GITHUB_LOGIN=${github_login}"
-                          container = pullBuildPush(image_name: 'jenkins/ide', dockerfile: "docker/jenkins/Dockerfile.${current_container.os}-${current_container.arch}", image_tag: image_tag, build_args: github_args + " " + jenkins_user_build_args())
-                      }
-                    }
-                    container.inside() {
-                        stage('compile package') {
-                            compile_package(get_type_from_os(current_container.os), current_container.flavor, current_container.variant)
+                    def current_image
+                    docker.withRegistry('https://263245908434.dkr.ecr.us-east-1.amazonaws.com', 'ecr:us-east-1:jenkins-aws') {
+                        stage('prepare ws/container') {
+                          prepareWorkspace()
+                          def image_tag = "${current_container.os}-${current_container.arch}-${params.RSTUDIO_VERSION_MAJOR}.${params.RSTUDIO_VERSION_MINOR}"
+                          current_image = docker.image("jenkins/ide:" + image_tag)
                         }
-                        stage('run tests') {
-                            run_tests(get_type_from_os(current_container.os), current_container.flavor, current_container.variant)
+                        current_image.inside() {
+                            stage('compile package') {
+                                compile_package(current_container.package_os, get_type_from_os(current_container.os), current_container.flavor, current_container.variant)
+                            }
+                            stage('run tests') {
+                                run_tests(get_type_from_os(current_container.os), current_container.flavor, current_container.variant)
+                            }
+                            stage('sentry upload') {
+                                sentry_upload(get_type_from_os(current_container.os), current_container.flavor)
+                            }
                         }
                     }
                     stage('upload artifacts') {
@@ -219,8 +271,12 @@ try {
         }
         // trigger desktop builds if we're in open-source repo
         if (env.JOB_NAME == 'IDE/open-source-pipeline/master') {
-          trigger_external_build('IDE/macos')
-          trigger_external_build('IDE/windows')
+          trigger_external_build('IDE/macos-v1.3')
+          trigger_external_build('IDE/windows-v1.3')
+        }
+        else if (env.JOB_NAME == 'IDE/open-source-pipeline/v1.2-patch') {
+          trigger_external_build('IDE/macos-v1.2')
+          trigger_external_build('IDE/windows-v1.2')
         }
         parallel parallel_containers
 
@@ -234,15 +290,20 @@ try {
           trigger_external_build('IDE/qa-autotest')
           trigger_external_build('IDE/qa-automation')
           trigger_external_build('IDE/monitor')
-          trigger_external_build('IDE/macos-pro')
-          trigger_external_build('IDE/windows-pro')
+          trigger_external_build('IDE/macos-v1.3-pro')
+          trigger_external_build('IDE/windows-v1.3-pro')
           trigger_external_build('IDE/session')
         }
+        else if (env.JOB_NAME == 'IDE/pro-pipeline/v1.2') {
+          trigger_external_build('IDE/macos-v1.2-pro')
+          trigger_external_build('IDE/windows-v1.2-pro')
+        }
 
-        slackSend channel: params.SLACK_CHANNEL, color: 'good', message: "${messagePrefix} passed (${currentBuild.result})"
+        slackSend channel: params.get('SLACK_CHANNEL', '#ide-builds'), color: 'good', message: "${messagePrefix} passed (${currentBuild.result})"
     }
 
 } catch(err) {
-   slackSend channel: params.SLACK_CHANNEL, color: 'bad', message: "${messagePrefix} failed: ${err}"
+   slackSend channel: params.get('SLACK_CHANNEL', '#ide-builds'), color: 'bad', message: "${messagePrefix} failed: ${err}"
    error("failed: ${err}")
 }
+

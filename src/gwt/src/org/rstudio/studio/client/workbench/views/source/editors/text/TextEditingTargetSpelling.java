@@ -1,7 +1,7 @@
 /*
  * TextEditingTargetSpelling.java
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -18,12 +18,29 @@ package org.rstudio.studio.client.workbench.views.source.editors.text;
 import java.util.ArrayList;
 import java.util.Iterator;
 
+import com.google.gwt.core.client.JsArray;
+import com.google.gwt.core.shared.GWT;
+import com.google.gwt.event.dom.client.KeyDownEvent;
+import com.google.gwt.event.dom.client.KeyDownHandler;
+import com.google.gwt.resources.client.ClientBundle;
+import com.google.gwt.resources.client.ImageResource;
+import com.google.gwt.user.client.Window;
+import com.google.gwt.user.client.ui.MenuItem;
 import org.rstudio.core.client.CsvReader;
 import org.rstudio.core.client.CsvWriter;
 import org.rstudio.core.client.ResultCallback;
+import org.rstudio.core.client.command.AppCommand;
 import org.rstudio.core.client.widget.NullProgressIndicator;
-import org.rstudio.studio.client.common.spelling.SpellChecker;
+import org.rstudio.core.client.widget.ToolbarPopupMenu;
+import org.rstudio.studio.client.common.filetypes.TextFileType;
+import org.rstudio.studio.client.common.spelling.TypoSpellChecker;
 import org.rstudio.studio.client.server.Void;
+import org.rstudio.studio.client.workbench.prefs.model.UserPrefs;
+import org.rstudio.studio.client.workbench.views.output.lint.LintManager;
+import org.rstudio.studio.client.workbench.views.output.lint.model.LintItem;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.Position;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.Range;
+import org.rstudio.studio.client.workbench.views.source.editors.text.ace.spelling.TokenPredicate;
 import org.rstudio.studio.client.workbench.views.source.editors.text.spelling.CheckSpelling;
 import org.rstudio.studio.client.workbench.views.source.editors.text.spelling.InitialProgressDialog;
 import org.rstudio.studio.client.workbench.views.source.editors.text.spelling.SpellingDialog;
@@ -31,23 +48,97 @@ import org.rstudio.studio.client.workbench.views.source.model.DocUpdateSentinel;
 
 import com.google.gwt.event.shared.HandlerRegistration;
 
-public class TextEditingTargetSpelling implements SpellChecker.Context
+public class TextEditingTargetSpelling implements TypoSpellChecker.Context
 {
+   interface Resources extends ClientBundle
+   {
+      @Source("./goToWorkingDir.png")
+      ImageResource addToDictIcon();
+   }
+
    public TextEditingTargetSpelling(DocDisplay docDisplay,
-                                    DocUpdateSentinel docUpdateSentinel)
+                                    DocUpdateSentinel docUpdateSentinel,
+                                    LintManager lintManager,
+                                    UserPrefs prefs)
    {
       docDisplay_ = docDisplay;
       docUpdateSentinel_ = docUpdateSentinel;
-      spellChecker_ = new SpellChecker(this);
-      
+      lintManager_ = lintManager;
+      prefs_ = prefs;
+      typoSpellChecker_ = new TypoSpellChecker(this);
+      injectContextMenuHandler();
    }
-   
+
+   public JsArray<LintItem> getLint()
+   {
+      JsArray<LintItem> lint = JsArray.createArray().cast();
+
+      /*
+         There are certain dictionaries blacklisted from realtime spellchecking, it's
+         possible due to external preference funny business to get into a state where
+         this function was incorrectly called. Detect that state, clean it up, and return.
+       */
+      final String language = prefs_.spellingDictionaryLanguage().getValue();
+      if (!TypoSpellChecker.canRealtimeSpellcheckDict(language))
+      {
+         prefs_.realTimeSpellchecking().setGlobalValue(false);
+         return lint;
+      }
+
+      TextFileType fileType = docDisplay_.getFileType();
+
+      // only spell check comments in code files
+      TokenPredicate tokenPredicate = fileType.getSpellCheckTokenPredicate();
+
+      // only get tokens for the visible screen
+      Iterable<Range> wordSource = docDisplay_.getWords(
+         tokenPredicate,
+         docDisplay_.getFileType().getCharPredicate(),
+         Position.create(docDisplay_.getFirstVisibleRow(), 0),
+         Position.create(docDisplay_.getLastVisibleRow(), docDisplay_.getLength(docDisplay_.getLastVisibleRow())));
+
+      final ArrayList<Range> wordRanges = new ArrayList<>();
+      ArrayList<String> prefetchWords = new ArrayList<>();
+
+      for (Range r : wordSource)
+      {
+         if (!typoSpellChecker_.shouldCheckSpelling(docDisplay_, r))
+            continue;
+
+         wordRanges.add(r);
+
+         // only check a certain number of words at once to not overwhelm the system
+         if (wordRanges.size() > prefs_.maxSpellcheckWords().getValue())
+            break;
+
+         String word = docDisplay_.getTextForRange(r);
+         if (!typoSpellChecker_.checkSpelling(word)) {
+            if (prefetchWords.size() < prefs_.maxSpellcheckPrefetch().getValue())
+               prefetchWords.add(word);
+
+            lint.push(LintItem.create(
+               r.getStart().getRow(),
+               r.getStart().getColumn(),
+               r.getEnd().getRow(),
+               r.getEnd().getColumn(),
+               "Spellcheck",
+               "spelling"));
+         }
+      }
+
+      if (prefetchWords.size() > 0)
+         typoSpellChecker_.prefetchWords(prefetchWords);
+
+      return lint;
+   }
+
+   // Legacy checkSpelling function for popup dialog
    public void checkSpelling()
    {
       if (isSpellChecking_)
          return;
       isSpellChecking_ = true;
-      new CheckSpelling(spellChecker_, docDisplay_,
+      new CheckSpelling(typoSpellChecker_, docDisplay_,
                         new SpellingDialog(),
                         new InitialProgressDialog(1000),
                         new ResultCallback<Void, Exception>()
@@ -75,19 +166,26 @@ public class TextEditingTargetSpelling implements SpellChecker.Context
    @Override
    public void invalidateAllWords()
    {
-      
+      invalidateMisspelledWords();
+      lintManager_.relintAfterDelay(LintManager.DEFAULT_LINT_DELAY);
    }
 
    @Override
    public void invalidateMisspelledWords()
    {
-      
+      docDisplay_.removeMarkers((a, m) -> a != null && a.text().toLowerCase().contains("spellcheck"));
    }  
-   
+
+   @Override
+   public void invalidateWord(String word)
+   {
+      docDisplay_.removeMarkersAtWord(word);
+   }
+
    @Override
    public ArrayList<String> readDictionary()
    {
-      ArrayList<String> ignoredWords = new ArrayList<String>();
+      ArrayList<String> ignoredWords = new ArrayList<>();
       String ignored = docUpdateSentinel_.getProperty(IGNORED_WORDS);
       if (ignored != null)
       {
@@ -119,7 +217,129 @@ public class TextEditingTargetSpelling implements SpellChecker.Context
       while (releaseOnDismiss_.size() > 0)
          releaseOnDismiss_.remove(0).removeHandler();
    }
-   
+
+   private void injectContextMenuHandler()
+   {
+      docDisplay_.addContextMenuHandler((event) ->
+      {
+         // If real time checking is off or
+         // If we have a selection, just return as the user likely wants to cut/copy/paste
+         if (!prefs_.realTimeSpellchecking().getValue() || docDisplay_.hasSelection())
+            return;
+
+         // Get the word under the cursor
+         Position pos = docDisplay_.getCursorPosition();
+         TextFileType fileType = docDisplay_.getFileType();
+         TokenPredicate tokenPredicate = fileType.getSpellCheckTokenPredicate();
+         Position endOfLine = Position.create(pos.getRow()+1, 0);
+         Iterable<Range> wordSource = docDisplay_.getWords(
+            tokenPredicate,
+            docDisplay_.getFileType().getCharPredicate(),
+            pos,
+            endOfLine);
+
+         Iterator<Range> wordsIterator = wordSource.iterator();
+
+         if (!wordsIterator.hasNext())
+            return;
+
+         String word;
+         Range wordRange = wordsIterator.next();
+
+         while (!wordRange.contains(pos))
+         {
+            if (wordsIterator.hasNext())
+               wordRange = wordsIterator.next();
+            else
+               break;
+         }
+         word = docDisplay_.getTextForRange(wordRange);
+
+         if (word == null ||
+             !typoSpellChecker_.shouldCheckSpelling(docDisplay_, wordRange) ||
+             typoSpellChecker_.checkSpelling(word))
+         {
+            return;
+         }
+
+         // final variables for lambdas
+         final String replaceWord = word;
+         final Range replaceRange = wordRange;
+
+         final ToolbarPopupMenu menu = new ToolbarPopupMenu();
+
+         String[] suggestions = typoSpellChecker_.suggestionList(word);
+
+         // We now know we're going to show our menu, stop default context menu
+         event.preventDefault();
+         event.stopPropagation();
+
+         int i = 0;
+         for (String suggestion : suggestions)
+         {
+            // Only show a limited number of suggestions
+            if (i >= MAX_SUGGESTIONS)
+               break;
+
+            MenuItem suggestionItem = new MenuItem(
+               AppCommand.formatMenuLabel(null, suggestion, ""),
+               true,
+               () -> {
+                  docDisplay_.removeMarkersAtCursorPosition();
+                  docDisplay_.replaceRange(replaceRange, suggestion);
+                  lintManager_.relintAfterDelay(LintManager.DEFAULT_LINT_DELAY);
+               });
+
+            menu.addItem(suggestionItem);
+            i++;
+         }
+
+         // Only add a separator if we have suggestions to separate from
+         if (suggestions.length > 0)
+            menu.addSeparator();
+
+         MenuItem ignoreItem = new MenuItem(
+            AppCommand.formatMenuLabel(null, "Ignore word", ""),
+            true,
+            () -> {
+               typoSpellChecker_.addIgnoredWord(replaceWord);
+               docDisplay_.removeMarkersAtCursorPosition();
+            });
+
+         menu.addItem(ignoreItem);
+         menu.addSeparator();
+
+         MenuItem addToDictionaryItem = new MenuItem(
+            AppCommand.formatMenuLabel(RES.addToDictIcon(), "Add to user dictionary", ""),
+            true,
+            () -> {
+               typoSpellChecker_.addToUserDictionary(replaceWord);
+               docDisplay_.removeMarkersAtCursorPosition();
+            });
+
+         menu.addItem(addToDictionaryItem);
+
+         menu.setPopupPositionAndShow((offWidth, offHeight) -> {
+            int clientX = event.getNativeEvent().getClientX();
+            int clientY = event.getNativeEvent().getClientY();
+            int menuX = Math.min(clientX, Window.getClientWidth() - offWidth);
+            int menuY = Math.min(clientY, Window.getClientHeight() - offHeight);
+            menu.setPopupPosition(menuX, menuY);
+         });
+      });
+
+      // relint the viewport as the user scrolls around
+      docDisplay_.addScrollYHandler((event) -> lintManager_.relintAfterDelay(LintManager.DEFAULT_LINT_DELAY));
+   }
+
+   private static final Resources RES = GWT.create(Resources.class);
+
+   private final class InputKeyDownHandler implements KeyDownHandler
+   {
+      public void onKeyDown(KeyDownEvent event)
+      {
+      }
+   }
 
    @Override
    public void releaseOnDismiss(HandlerRegistration handler)
@@ -129,11 +349,14 @@ public class TextEditingTargetSpelling implements SpellChecker.Context
 
    private boolean isSpellChecking_;
 
-   private final static String IGNORED_WORDS = "ignored_words"; 
-   
+   private final static String IGNORED_WORDS = "ignored_words";
+   private final static int MAX_SUGGESTIONS = 5;
+
    private final DocDisplay docDisplay_;
    private final DocUpdateSentinel docUpdateSentinel_;
-   private final SpellChecker spellChecker_;
+   private final LintManager lintManager_;
+   private final UserPrefs prefs_;
+   private final TypoSpellChecker typoSpellChecker_;
  
    private ArrayList<HandlerRegistration> releaseOnDismiss_ = 
                                     new ArrayList<HandlerRegistration>();

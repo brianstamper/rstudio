@@ -1,7 +1,7 @@
 /*
  * SpellCheckerResult.java
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -22,15 +22,14 @@ public class SpellCheckerResult
 {
    public SpellCheckerResult()
    {
-      correct_ = new ArrayList<String>();
-      incorrect_ = new ArrayList<String>();
+      correct_ = new ArrayList<>();
+      incorrect_ = new ArrayList<>();
    }
    
    public List<String> getCorrect()
    {
       return correct_;
    }
-   
    public List<String> getIncorrect()
    {
       return incorrect_;

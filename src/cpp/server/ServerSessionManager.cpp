@@ -1,7 +1,7 @@
 /*
  * ServerSessionManager.cpp
  *
- * Copyright (C) 2009-17 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -13,20 +13,22 @@
  *
  */
 
+#include <core/CrashHandler.hpp>
+
 #include <server/ServerSessionManager.hpp>
 
-#include <boost/foreach.hpp>
 #include <boost/format.hpp>
 
-#include <core/SafeConvert.hpp>
+#include <shared_core/SafeConvert.hpp>
 #include <core/system/PosixUser.hpp>
 #include <core/system/Environment.hpp>
+#include <core/json/JsonRpc.hpp>
 
 #include <monitor/MonitorClient.hpp>
 #include <session/SessionConstants.hpp>
 
 #include <server/ServerOptions.hpp>
-
+#include <server/ServerPaths.hpp>
 #include <server/ServerErrorCategory.hpp>
 
 #include <server/auth/ServerValidateUser.hpp>
@@ -43,6 +45,31 @@ namespace server {
 namespace {
 
 static std::string s_launcherToken;
+
+void readRequestArgs(const core::http::Request& request, core::system::Options *pArgs)
+{
+   // we only do this when establishing new sessions via client_init
+   if (!boost::algorithm::ends_with(request.uri(), "client_init"))
+      return;
+
+   // parse the request (okay if it fails, none of the below is critical)
+   json::JsonRpcRequest clientInit;
+   Error error = json::parseJsonRpcRequest(request.body(), &clientInit);
+   if (error)
+      return;
+   
+   // read parameters from the request if present
+   int restoreWorkspace = -1;
+   json::getOptionalParam<int>(clientInit.kwparams, "restore_workspace", -1, &restoreWorkspace);
+   if (restoreWorkspace != -1)
+      pArgs->push_back(std::make_pair("--r-restore-workspace", 
+               safe_convert::numberToString(restoreWorkspace)));
+   int runRprofile = -1;
+   json::getOptionalParam<int>(clientInit.kwparams, "run_rprofile", -1, &runRprofile);
+   if (runRprofile != -1)
+      pArgs->push_back(std::make_pair("--r-run-rprofile", 
+            safe_convert::numberToString(runRprofile)));
+}
 
 core::system::ProcessConfig sessionProcessConfig(
          r_util::SessionContext context,
@@ -75,6 +102,12 @@ core::system::ProcessConfig sessionProcessConfig(
       args.push_back(std::make_pair("-" kScopeSessionOptionShort,
                                     context.scope.id()));
    }
+
+   // ensure cookies are marked secure if applicable
+   bool useSecureCookies = options.authCookiesForceSecure() ||
+                           options.getOverlayOption("ssl-enabled") == "1";
+   args.push_back(std::make_pair("--" kUseSecureCookiesSessionOption,
+                                 useSecureCookies ? "1" : "0"));
 
    // create launch token if we haven't already
    if (s_launcherToken.empty())
@@ -125,7 +158,7 @@ core::system::ProcessConfig sessionProcessConfig(
                         rVersion.number());
    core::system::setenv(&environment,
                         kRStudioDefaultRVersionHome,
-                        rVersion.homeDir().absolutePath());
+                        rVersion.homeDir().getAbsolutePath());
 
    // forward the auth options
    core::system::setenv(&environment,
@@ -144,6 +177,18 @@ core::system::ProcessConfig sessionProcessConfig(
    // the session should log an error if its version does not match, as that is
    // likely an unsupported configuration
    environment.push_back({kRStudioVersion, RSTUDIO_VERSION});
+
+   // forward over crash handler environment if we have it (used for development mode)
+   if (!core::system::getenv(kCrashHandlerEnvVar).empty())
+      environment.push_back({kCrashHandlerEnvVar, core::system::getenv(kCrashHandlerEnvVar)});
+
+   if (!core::system::getenv(kCrashpadHandlerEnvVar).empty())
+      environment.push_back({kCrashpadHandlerEnvVar, core::system::getenv(kCrashpadHandlerEnvVar)});
+
+
+   // forward path for session temp dir (used for local stream path)
+   environment.push_back(
+         std::make_pair(kSessionTmpDirEnvVar, sessionTmpDir().getAbsolutePath()));
 
    // build the config object and return it
    core::system::ProcessConfig config;
@@ -208,14 +253,18 @@ Error SessionManager::launchSession(boost::asio::io_service& ioService,
    }
    END_LOCK_MUTEX
 
+   // translate querystring arguments into extra session args 
+   core::system::Options args;
+   readRequestArgs(request, &args);
+
    // determine launch options
    r_util::SessionLaunchProfile profile;
    profile.context = context;
    profile.executablePath = server::options().rsessionPath();
-   profile.config = sessionProcessConfig(context);
+   profile.config = sessionProcessConfig(context, args);
 
    // pass the profile to any filters we have
-   BOOST_FOREACH(SessionLaunchProfileFilter f, sessionLaunchProfileFilters_)
+   for (SessionLaunchProfileFilter f : sessionLaunchProfileFilters_)
    {
       f(&profile);
    }
@@ -317,6 +366,12 @@ r_util::SessionLaunchProfile createSessionLaunchProfile(const r_util::SessionCon
    profile.context = context;
    profile.executablePath = server::options().rsessionPath();
    profile.config = sessionProcessConfig(context, extraArgs);
+
+   // pass the profile to any filters we have
+   for (const SessionManager::SessionLaunchProfileFilter f : sessionManager().getSessionLaunchProfileFilters())
+   {
+      f(&profile);
+   }
 
    return profile;
 }

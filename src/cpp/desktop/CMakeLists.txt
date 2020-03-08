@@ -1,7 +1,7 @@
 #
 # CMakeLists.txt
 #
-# Copyright (C) 2009-18 by RStudio, Inc.
+# Copyright (C) 2009-19 by RStudio, PBC
 #
 # Unless you have received this program directly from RStudio pursuant
 # to the terms of a commercial license agreement with RStudio, then
@@ -13,13 +13,11 @@
 #
 #
 
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.4.3)
 
 project(DESKTOP)
 
-if(CMAKE_VERSION VERSION_GREATER "3.0.0")
-   cmake_policy(SET CMP0043 NEW)
-endif()
+cmake_policy(SET CMP0043 NEW)
 
 # on unix prefer qtsdk installs over system-level libraries. note this
 # can be overriden by defining QT_QMAKE_EXECUTABLE when invoking cmake
@@ -38,9 +36,9 @@ if(NOT WIN32)
       endif()
          
       if(APPLE)
-         set(QT_CANDIDATES 5.12.1)   
+         set(QT_CANDIDATES 5.12.6)
       else()
-         set(QT_CANDIDATES 5.12.1 5.10.1)
+         set(QT_CANDIDATES 5.12.6 5.10.1)
       endif()
 
       # find the newest installed Qt version among the versions we build
@@ -74,7 +72,7 @@ if(NOT WIN32)
    endif()
 else()
    # Windows
-   set(QT_VERSION "5.12.1")
+   set(QT_VERSION "5.12.6")
    set(QT_VERSION_SUBDIR "${QT_VERSION}")   
    if(NOT QT_QMAKE_EXECUTABLE)
 
@@ -201,6 +199,7 @@ configure_file (${CMAKE_CURRENT_SOURCE_DIR}/desktop-config.h.in
 # source files
 set(DESKTOP_SOURCE_FILES
   DesktopActivationOverlay.cpp
+  DesktopSessionServersOverlay.cpp
   DesktopBrowserWindow.cpp
   DesktopDownloadItemHelper.cpp
   DesktopGwtCallback.cpp
@@ -224,6 +223,8 @@ set(DESKTOP_SOURCE_FILES
   DesktopSlotBinders.cpp
   DesktopSubMenu.cpp
   DesktopSynctex.cpp
+  DesktopJobLauncherOverlay.cpp
+  RemoteDesktopSessionLauncherOverlay.cpp
   3rdparty/qtsingleapplication/qtsingleapplication.cpp
   3rdparty/qtsingleapplication/qtlocalpeer.cpp
 )
@@ -278,8 +279,12 @@ endif()
 include_directories(
   include
   ${CORE_SOURCE_DIR}/include
+  ${SHARED_CORE_SOURCE_DIR}/include
+  ${OPENSSL_INCLUDE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
+  ${EXT_SOURCE_DIR}
+  ${SESSION_SOURCE_DIR}/include
   ${TESTS_INCLUDE_DIR}
 )
 
@@ -308,17 +313,14 @@ if(WIN32)
    configure_file (${CMAKE_CURRENT_SOURCE_DIR}/rstudio.exe.manifest
                    ${CMAKE_CURRENT_BINARY_DIR}/rstudio.exe.manifest COPYONLY)
 
-   add_subdirectory(urlopener)
-   add_subdirectory(synctex/rsinverse)
+   if(NOT RSTUDIO_SESSION_WIN32)
+      add_subdirectory(urlopener)
+      add_subdirectory(synctex/rsinverse)
+   endif()
 
    set(
       CMAKE_EXE_LINKER_FLAGS
       "${CMAKE_EXE_LINKER_FLAGS} /subsystem:windows")
-
-elseif(APPLE)
-   find_library(APPLICATION_SERVICES_LIBRARY NAMES ApplicationServices)
-   find_library(COCOA_LIBRARY NAMES Cocoa)
-   find_library(SECURITY_LIBRARY NAMES Security)
 endif(WIN32)
 
 
@@ -360,7 +362,7 @@ endif()
 # define executable (Windows & Linux)
 if(NOT APPLE)
 
-   add_executable(rstudio
+   add_stripped_executable(rstudio
       ${DESKTOP_SOURCE_FILES}
       ${MOC_DESKTOP_SOURCE_FILES}
       ${DESKTOP_RESOURCES_SOURCES}
@@ -387,12 +389,13 @@ if(NOT APPLE)
       ${QT_LIBRARIES}
       ${Boost_LIBRARIES}
       rstudio-core
+      ${CRASHPAD_LIBRARIES}
       ${LINK_FLAGS}
    )
 
    # extra dependencies for Windows
    if(WIN32)
-      target_link_libraries(rstudio Version)
+      target_link_libraries(rstudio Version Crypt32)
    endif()
 
 # for OSX we create a bundle
@@ -416,7 +419,7 @@ else()
    # define bundle name and executable
    set(MACOSX_BUNDLE_BUNDLE_NAME "RStudio")
 
-   add_executable(RStudio MACOSX_BUNDLE
+   add_stripped_executable(RStudio MACOSX_BUNDLE
       ${DESKTOP_SOURCE_FILES}
       ${MOC_DESKTOP_SOURCE_FILES}
       ${DESKTOP_RESOURCES_SOURCES}
@@ -430,7 +433,8 @@ else()
       rstudio-core
       ${APPLICATION_SERVICES_LIBRARY}
       ${COCOA_LIBRARY}
-      ${SECURITY_LIBRARY})
+      ${SECURITY_LIBRARY}
+      ${CRASHPAD_LIBRARIES})
 
 endif()
 
@@ -507,7 +511,7 @@ if(RSTUDIO_BUNDLE_QT)
       endif()
 
       # this copies over the frameworks and plugins
-      install(CODE "execute_process(COMMAND \"${MACDEPLOYQT_COMMAND}\" \"${APPS}\" -verbose=1 -always-overwrite)")
+      install(CODE "execute_process(COMMAND \"${MACDEPLOYQT_COMMAND}\" \"${APPS}\" -verbose=1 -always-overwrite -no-strip)")
 
       # fixups needed after running macdeployqt
       install(CODE "execute_process(COMMAND install_name_tool -add_rpath \"@executable_path/../Frameworks\" \"${RSTUDIO_APP_BIN}\")")
@@ -549,6 +553,15 @@ if(RSTUDIO_BUNDLE_QT)
    endif()
           
 endif(RSTUDIO_BUNDLE_QT)
+
+# install HTML templates
+file(
+   COPY ${CMAKE_CURRENT_SOURCE_DIR}/html
+   DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
+
+install(
+   DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/resources/html
+   DESTINATION ${RSTUDIO_INSTALL_SUPPORTING}/resources)
 
 # install stylesheets
 if(NOT APPLE)

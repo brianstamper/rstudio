@@ -1,7 +1,7 @@
 /*
  * TextEditingTarget.java
  *
- * Copyright (C) 2009-18 by RStudio, Inc.
+ * Copyright (C) 2009-20 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -30,7 +30,6 @@ import com.google.gwt.event.shared.GwtEvent;
 import com.google.gwt.event.shared.HandlerManager;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.http.client.URL;
-import com.google.gwt.resources.client.ImageResource;
 import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
 import com.google.gwt.user.client.Command;
 import com.google.gwt.user.client.Event;
@@ -74,6 +73,7 @@ import org.rstudio.studio.client.common.debugging.events.BreakpointsSavedEvent;
 import org.rstudio.studio.client.common.debugging.model.Breakpoint;
 import org.rstudio.studio.client.common.dependencies.DependencyManager;
 import org.rstudio.studio.client.common.filetypes.DocumentMode;
+import org.rstudio.studio.client.common.filetypes.FileIcon;
 import org.rstudio.studio.client.common.filetypes.FileType;
 import org.rstudio.studio.client.common.filetypes.FileTypeCommands;
 import org.rstudio.studio.client.common.filetypes.FileTypeRegistry;
@@ -95,7 +95,6 @@ import org.rstudio.studio.client.notebook.CompileNotebookResult;
 import org.rstudio.studio.client.plumber.events.LaunchPlumberAPIEvent;
 import org.rstudio.studio.client.plumber.events.PlumberAPIStatusEvent;
 import org.rstudio.studio.client.plumber.model.PlumberAPIParams;
-import org.rstudio.studio.client.plumber.model.PlumberViewerType;
 import org.rstudio.studio.client.rmarkdown.RmdOutput;
 import org.rstudio.studio.client.rmarkdown.events.ConvertToShinyDocEvent;
 import org.rstudio.studio.client.rmarkdown.events.RmdOutputFormatChangedEvent;
@@ -117,16 +116,17 @@ import org.rstudio.studio.client.server.ServerError;
 import org.rstudio.studio.client.server.ServerRequestCallback;
 import org.rstudio.studio.client.server.Void;
 import org.rstudio.studio.client.server.VoidServerRequestCallback;
+import org.rstudio.studio.client.shiny.ShinyApplication;
 import org.rstudio.studio.client.shiny.events.LaunchShinyApplicationEvent;
 import org.rstudio.studio.client.shiny.events.ShinyApplicationStatusEvent;
 import org.rstudio.studio.client.shiny.model.ShinyApplicationParams;
-import org.rstudio.studio.client.shiny.model.ShinyViewerType;
+import org.rstudio.studio.client.shiny.model.ShinyTestResults;
 import org.rstudio.studio.client.workbench.WorkbenchContext;
 import org.rstudio.studio.client.workbench.commands.Commands;
 import org.rstudio.studio.client.workbench.model.Session;
 import org.rstudio.studio.client.workbench.model.SessionInfo;
-import org.rstudio.studio.client.workbench.prefs.model.UIPrefs;
-import org.rstudio.studio.client.workbench.prefs.model.UIPrefsAccessor;
+import org.rstudio.studio.client.workbench.prefs.model.UserPrefs;
+import org.rstudio.studio.client.workbench.prefs.model.UserState;
 import org.rstudio.studio.client.workbench.ui.FontSizeManager;
 import org.rstudio.studio.client.workbench.views.console.events.SendToConsoleEvent;
 import org.rstudio.studio.client.workbench.views.console.shell.editor.InputEditorPosition;
@@ -185,6 +185,7 @@ import org.rstudio.studio.client.workbench.views.vcs.common.model.GitHubViewRequ
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 
 public class TextEditingTarget implements 
@@ -255,6 +256,8 @@ public class TextEditingTarget implements
       void toggleDocumentOutline();
       
       void setNotebookUIVisible(boolean visible);
+
+      void setAccessibleName(String name);
    }
 
    private class SaveProgressIndicator implements ProgressIndicator
@@ -335,7 +338,7 @@ public class TextEditingTarget implements
 
       public void onError(final String message)
       {
-         // in case the error occured saving a document that wasn't 
+         // in case the error occurred saving a document that wasn't
          // in the foreground
          view_.ensureVisible();
          
@@ -421,7 +424,8 @@ public class TextEditingTarget implements
                             Synctex synctex,
                             FontSizeManager fontSizeManager,
                             DocDisplay docDisplay,
-                            UIPrefs prefs, 
+                            UserPrefs prefs, 
+                            UserState state, 
                             BreakpointManager breakpointManager,
                             SourceBuildHelper sourceBuildHelper,
                             DependencyManager dependencyManager)
@@ -446,6 +450,7 @@ public class TextEditingTarget implements
       dirtyState_ = new DirtyState(docDisplay_, false);
       lintManager_ = new LintManager(this, cppCompletionContext_);
       prefs_ = prefs;
+      state_ = state;
       compilePdfHelper_ = new TextEditingTargetCompilePdfHelper(docDisplay_);
       rmarkdownHelper_ = new TextEditingTargetRMarkdownHelper();
       cppHelper_ = new TextEditingTargetCppHelper(cppCompletionContext_, 
@@ -467,7 +472,7 @@ public class TextEditingTarget implements
                                          docDisplay_, 
                                          events_, 
                                          this);
-      
+
       docDisplay_.addKeyDownHandler(new KeyDownHandler()
       {
          public void onKeyDown(KeyDownEvent event)
@@ -511,7 +516,7 @@ public class TextEditingTarget implements
                jumpToNextFunction();
             }
             else if ((ne.getKeyCode() == KeyCodes.KEY_ESCAPE) &&
-                     !prefs_.useVimMode().getValue())
+                     prefs_.editorKeybindings().getValue() != UserPrefs.EDITOR_KEYBINDINGS_VIM)
             {
                event.preventDefault();
                event.stopPropagation();
@@ -627,6 +632,27 @@ public class TextEditingTarget implements
          }
       });
       
+      docDisplay_.addEditorBlurHandler((BlurEvent evt) ->
+      {
+         // When the editor loses focus, perform an autosave if enabled, the
+         // buffer is dirty, and we have a file to save to
+         if (prefs.autoSaveOnBlur().getValue() && 
+             dirtyState_.getValue() && 
+             getPath() != null &&
+             !docDisplay_.hasActiveCollabSession())
+         {
+            try
+            {
+               save();
+            }
+            catch(Exception e)
+            {
+               // Autosave exceptions are logged rather than displayed
+               Debug.logException(e);
+            }
+         }
+      });
+
       events_.addHandler(
             ShinyApplicationStatusEvent.TYPE, 
             new ShinyApplicationStatusEvent.Handler()
@@ -643,9 +669,9 @@ public class TextEditingTarget implements
                   {
                      String state = event.getParams().getState();
                      if (event.getParams().getViewerType() != 
-                            ShinyViewerType.SHINY_VIEWER_PANE &&
+                            UserPrefs.SHINY_VIEWER_TYPE_PANE &&
                          event.getParams().getViewerType() != 
-                            ShinyViewerType.SHINY_VIEWER_WINDOW)
+                            UserPrefs.SHINY_VIEWER_TYPE_WINDOW)
                      {
                         // we can't control the state when it's not in an
                         // RStudio-owned window, so treat the app as stopped
@@ -671,9 +697,9 @@ public class TextEditingTarget implements
                   {
                      String state = event.getParams().getState();
                      if (event.getParams().getViewerType() != 
-                            PlumberViewerType.PLUMBER_VIEWER_PANE &&
+                            UserPrefs.PLUMBER_VIEWER_TYPE_PANE &&
                          event.getParams().getViewerType() != 
-                            PlumberViewerType.PLUMBER_VIEWER_WINDOW)
+                            UserPrefs.PLUMBER_VIEWER_TYPE_WINDOW)
                      {
                         // we can't control the state when it's not in an
                         // RStudio-owned window, so treat the app as stopped
@@ -849,6 +875,33 @@ public class TextEditingTarget implements
                   }
                }
             });
+
+      releaseOnDismiss_.add(
+         prefs.autoSaveOnBlur().addValueChangeHandler((ValueChangeEvent<Boolean> val) ->
+         {
+            // When the user turns on autosave, disable Source on Save if it was
+            // previously enabled; otherwise documents which were open with this
+            // setting enabled will start sourcing themselves on blur.
+            if (val.getValue())
+            {
+               setSourceOnSave(false);
+            }
+         }));
+      releaseOnDismiss_.add(
+         prefs.autoSaveOnIdle().bind((String behavior) ->
+         {
+            if (behavior == UserPrefs.AUTO_SAVE_ON_IDLE_COMMIT)
+            {
+               // When switching into autosave on idle mode, start the timer
+               setSourceOnSave(false);
+               nudgeAutosave();
+            }
+            else
+            {
+               // When leaving it, stop the timer
+               autoSaveTimer_.cancel();
+            }
+         }));
    }
    
    static {
@@ -1092,7 +1145,10 @@ public class TextEditingTarget implements
    @Override
    public void setSourceOnSave(boolean sourceOnSave)
    {
-      view_.getSourceOnSave().setValue(sourceOnSave, true);
+      if (view_ != null)
+      {
+         view_.getSourceOnSave().setValue(sourceOnSave, true);
+      }
    }
    
    @Override
@@ -1251,6 +1307,24 @@ public class TextEditingTarget implements
       view_.showRequiredPackagesMissingWarning(packages);
    }
    
+   public void showTexInstallationMissingWarning(String message)
+   {
+      view_.showTexInstallationMissingWarning(message);
+   }
+   
+   public void installTinyTeX()
+   {
+      Command onInstall = () -> {
+         String code = "tinytex::install_tinytex()";
+         events_.fireEvent(new SendToConsoleEvent(code, true));
+      };
+      
+      dependencyManager_.withTinyTeX(
+            "Installing tinytex",
+            "Installing TinyTeX",
+            onInstall);
+   }
+   
    private void jumpToPreviousFunction()
    {
       Scope jumpTo = scopeHelper_.getPreviousFunction(
@@ -1292,19 +1366,20 @@ public class TextEditingTarget implements
             document,
             globalDisplay_.getProgressIndicator("Save File"),
             dirtyState_,
-            events_);
+            events_,
+            prefs_);
       
       view_ = new TextEditingTargetWidget(this,
                                           docUpdateSentinel_,
                                           commands_,
                                           prefs_,
+                                          state_,
                                           fileTypeRegistry_,
                                           docDisplay_,
                                           fileType_,
                                           extendedType_,
                                           events_,
-                                          session_,
-                                          server_);
+                                          session_);
 
       roxygenHelper_ = new RoxygenHelper(docDisplay_, view_);
       packageDependencyHelper_ = new TextEditingTargetPackageDependencyHelper(this, docUpdateSentinel_, docDisplay_);
@@ -1329,6 +1404,7 @@ public class TextEditingTarget implements
          @Override
          public void onValueChange(ValueChangeEvent<String> event)
          {
+            view_.setAccessibleName(name_.getValue());
             FileSystemItem item = FileSystemItem.createFile(event.getValue());
             if (shouldEnforceHardTabs(item))
                docDisplay_.setUseSoftTabs(false);
@@ -1374,8 +1450,13 @@ public class TextEditingTarget implements
 
       registerPrefs(releaseOnDismiss_, prefs_, projConfig_, docDisplay_, document);
       
-      // Initialize sourceOnSave, and keep it in sync
-      view_.getSourceOnSave().setValue(document.sourceOnSave(), false);
+      // Initialize sourceOnSave, and keep it in sync. Don't source on save
+      // (regardless of preference) in auto save mode, which is mutually
+      // exclusive with the manual source-and-save workflow.
+      boolean sourceOnSave = document.sourceOnSave();
+      if (prefs_.autoSaveEnabled())
+         sourceOnSave = false;
+      view_.getSourceOnSave().setValue(sourceOnSave, false);
       view_.getSourceOnSave().addValueChangeHandler(new ValueChangeHandler<Boolean>()
       {
          public void onValueChange(ValueChangeEvent<Boolean> event)
@@ -1396,6 +1477,10 @@ public class TextEditingTarget implements
          {
             dirtyState_.markDirty(true);
             docDisplay_.clearSelectionHistory();
+
+            // Nudge autosave timer (so it doesn't fire while the document is
+            // actively mutating)
+            nudgeAutosave();
          }
       });
 
@@ -1532,14 +1617,12 @@ public class TextEditingTarget implements
       syncFontSize(releaseOnDismiss_, events_, view_, fontSizeManager_);
      
 
-      final String rTypeId = FileTypeRegistry.R.getTypeId();
       releaseOnDismiss_.add(prefs_.softWrapRFiles().addValueChangeHandler(
             new ValueChangeHandler<Boolean>()
             {
                public void onValueChange(ValueChangeEvent<Boolean> evt)
                {
-                  if (fileType_.getTypeId().equals(rTypeId))
-                     view_.adaptToFileType(fileType_);
+                  view_.adaptToFileType(fileType_);
                }
             }
       ));
@@ -1571,9 +1654,8 @@ public class TextEditingTarget implements
          }
       }));
       
-      spelling_ = new TextEditingTargetSpelling(docDisplay_, 
-                                                docUpdateSentinel_);
-      
+      spelling_ = new TextEditingTargetSpelling(docDisplay_, docUpdateSentinel_, lintManager_, prefs_);
+
 
       // show/hide the debug toolbar when the dirty state changes. (note:
       // this doesn't yet handle the case where the user saves the document,
@@ -1670,6 +1752,7 @@ public class TextEditingTarget implements
       
       syncPublishPath(document.getPath());
       initStatusBar();
+      lintManager_.relintAfterDelay(prefs_.documentLoadLintDelay().getValue());
    }
    
    private void updateBreakpointWarningBar()
@@ -2490,7 +2573,7 @@ public class TextEditingTarget implements
    private void withChooseEncoding(final String defaultEncoding,
                                    final CommandWithArg<String> command)
    {
-      view_.ensureVisible();;
+      view_.ensureVisible();
       
       server_.iconvlist(new SimpleRequestCallback<IconvListResult>()
       {
@@ -2516,7 +2599,7 @@ public class TextEditingTarget implements
                         if (d.getValue().isSaveAsDefault())
                         {
                            prefs_.defaultEncoding().setGlobalValue(newEncoding);
-                           prefs_.writeUIPrefs();
+                           prefs_.writeUserPrefs();
                         }
 
                         command.execute(newEncoding);
@@ -2833,9 +2916,9 @@ public class TextEditingTarget implements
       return null;
    }
 
-   public ImageResource getIcon()
+   public FileIcon getIcon()
    {
-      return fileType_.getDefaultIcon();
+      return fileType_.getDefaultFileIcon();
    }
 
    public String getTabTooltip()
@@ -2988,7 +3071,35 @@ public class TextEditingTarget implements
    {
       docUpdateSentinel_.withSavedDoc(onsaved);
    }
-   
+
+   @Handler
+   void onWordCount()
+   {
+      int totalWords = 0;
+      int selectionWords = 0;
+
+      Range selectionRange = docDisplay_.getSelectionRange();
+      TextFileType fileType = docDisplay_.getFileType();
+      Iterator<Range> wordIter = docDisplay_.getWords(
+         fileType.getTokenPredicate(),
+         docDisplay_.getFileType().getCharPredicate(),
+         Position.create(0, 0),
+         null).iterator();
+
+      while (wordIter.hasNext())
+      {
+         Range r = wordIter.next();
+         totalWords++;
+         if (selectionRange.intersects(r))
+            selectionWords++;
+      }
+
+      String selectedWordsText = selectionWords == 0 ? "" : "\nSelected words: " + selectionWords;
+      globalDisplay_.showMessage(MessageDisplay.MSG_INFO,
+         "Word Count",
+         "Total words: " + totalWords + " " + selectedWordsText);
+   }
+
    @Handler
    void onCheckSpelling()
    {
@@ -3010,15 +3121,11 @@ public class TextEditingTarget implements
    @Handler
    void onReopenSourceDocWithEncoding()
    {
-      withChooseEncoding(
-            docUpdateSentinel_.getEncoding(),
-            new CommandWithArg<String>()
-            {
-               public void execute(String encoding)
-               {
-                  docUpdateSentinel_.reopenWithEncoding(encoding);
-               }
-            });
+	   saveThenExecute(null, () -> {
+	      withChooseEncoding(
+	            docUpdateSentinel_.getEncoding(),
+	            (String encoding) -> docUpdateSentinel_.reopenWithEncoding(encoding));
+	   });
    }
 
    @Handler
@@ -3478,9 +3585,34 @@ public class TextEditingTarget implements
       // First, figure out whether we're commenting or uncommenting.
       // If we discover any line that doesn't start with the comment sequence,
       // then we'll comment the whole selection.
-      boolean isCommentAction = false;
-      for (String line : lines)
+      
+      // ignore empty lines at start, end of selection when detecting comments
+      // https://github.com/rstudio/rstudio/issues/4163
+      
+      int start = 0;
+      for (int i = 0; i < lines.length; i++)
       {
+         if (lines[i].trim().isEmpty())
+            continue;
+         
+         start = i;
+         break;
+      }
+      
+      int end = lines.length;
+      for (int i = lines.length; i > 0; i--)
+      {
+         if (lines[i - 1].trim().isEmpty())
+            continue;
+         
+         end = i;
+         break;
+      }
+      
+      boolean isCommentAction = false;
+      for (int i = start; i < end; i++)
+      {
+         String line = lines[i];
          String trimmed = line.trim();
          
          // Ignore lines that are just whitespace.
@@ -3569,7 +3701,7 @@ public class TextEditingTarget implements
             // We want to strip out the leading comment prefix,
             // but preserve the indent.
             int startIdx = commentStartIdx + commentStart.length();
-            if (Character.isSpace(line.charAt(startIdx)))
+            if (Character.isSpace(StringUtil.charAt(line, startIdx)))
                startIdx++;
             
             int endIdx = commentEndIdx;
@@ -4051,7 +4183,7 @@ public class TextEditingTarget implements
                                                 cursorRowIndex, cursorColIndex);
 
       int maxLineLength =
-                        prefs_.printMarginColumn().getValue() - prefix.length();
+                        prefs_.marginColumn().getValue() - prefix.length();
 
       WordWrap wordWrap = new WordWrap(maxLineLength, false)
       {
@@ -4207,19 +4339,19 @@ public class TextEditingTarget implements
    @Handler
    void onExecuteCurrentLine()
    {
-      codeExecution_.executeBehavior(UIPrefsAccessor.EXECUTE_LINE);
+      codeExecution_.executeBehavior(UserPrefs.EXECUTION_BEHAVIOR_LINE);
    }
 
    @Handler
    void onExecuteCurrentStatement()
    {
-      codeExecution_.executeBehavior(UIPrefsAccessor.EXECUTE_STATEMENT);
+      codeExecution_.executeBehavior(UserPrefs.EXECUTION_BEHAVIOR_STATEMENT);
    }
 
    @Handler
    void onExecuteCurrentParagraph()
    {
-      codeExecution_.executeBehavior(UIPrefsAccessor.EXECUTE_PARAGRAPH);
+      codeExecution_.executeBehavior(UserPrefs.EXECUTION_BEHAVIOR_PARAGRAPH);
    }
 
    @Handler
@@ -4227,7 +4359,19 @@ public class TextEditingTarget implements
    {
       codeExecution_.sendSelectionToTerminal(false);
    }
- 
+
+   @Handler
+   void onOpenNewTerminalAtEditorLocation()
+   {
+      codeExecution_.openNewTerminalHere();
+   }
+
+   @Handler
+   void onSendFilenameToTerminal()
+   {
+      codeExecution_.sendFilenameToTerminal();
+   }
+
    @Override
    public String extractCode(DocDisplay docDisplay, Range range)
    {
@@ -4639,7 +4783,7 @@ public class TextEditingTarget implements
                Position pos = moveCursorToNextInsertLocation();
                
                // truncate length to print margin - 5
-               int printMarginColumn = prefs_.printMarginColumn().getValue();
+               int printMarginColumn = prefs_.marginColumn().getValue();
                int length = printMarginColumn - 5;
                
                // truncate label to maxLength - 10 (but always allow at 
@@ -4889,6 +5033,25 @@ public class TextEditingTarget implements
    {
       return null;
    }
+
+   @Override
+   public String getCurrentStatus()
+   {
+      Position pos = docDisplay_.getCursorPosition();
+      String scope = statusBar_.getScope().getValue();
+      if (StringUtil.isNullOrEmpty(scope))
+         scope = "None";
+      String name = getName().getValue();
+      if (StringUtil.isNullOrEmpty(name))
+         name = "No name";
+
+      StringBuilder status = new StringBuilder();
+      status.append("Row ").append(pos.getRow() + 1).append(" Column ").append(pos.getColumn() + 1);
+      status.append(" Scope ").append(scope);
+      status.append(" File type ").append(fileType_.getLabel());
+      status.append(" File name ").append(name);
+      return status.toString();
+   }
    
    private boolean isRChunk(Scope scope)
    {
@@ -5083,7 +5246,7 @@ public class TextEditingTarget implements
       {
          String text = scopeHelper_.getSweaveChunkText(chunk);
          code.append(text);
-         if (text.length() > 0 && text.charAt(text.length()-1) != '\n')
+         if (text.length() > 0 && StringUtil.charAt(text, text.length()-1) != '\n')
             code.append('\n');
       }
       return code.toString();
@@ -5195,10 +5358,6 @@ public class TextEditingTarget implements
       String code = docDisplay_.getCode();
       if (code != null && code.trim().length() > 0)
       {
-         // R 2.14 prints a warning when sourcing a file with no trailing \n
-         if (!code.endsWith("\n"))
-            code = code + "\n";
-
          boolean sweave = 
             fileType_.canCompilePDF() || 
             fileType_.canKnitToHTML() ||
@@ -5256,19 +5415,18 @@ public class TextEditingTarget implements
       if (prefs_.sourceWithEcho().getValue() != echo)
       {
          prefs_.sourceWithEcho().setGlobalValue(echo, true);
-         prefs_.writeUIPrefs();
+         prefs_.writeUserPrefs();
       }
    }
    
    private void runShinyApp()
    {
-      sourceBuildHelper_.withSaveFilesBeforeCommand(new Command() {
-         @Override
-         public void execute()
-         {
-            events_.fireEvent(new LaunchShinyApplicationEvent(getPath(),
-                  getExtendedFileType()));
-         }
+      sourceBuildHelper_.withSaveFilesBeforeCommand(() ->
+      {
+         events_.fireEvent(new LaunchShinyApplicationEvent(getPath(),
+               prefs_.shinyBackgroundJobs().getValue() ?
+                  ShinyApplication.BACKGROUND_APP :
+                  ShinyApplication.FOREGROUND_APP, getExtendedFileType()));
       }, "Run Shiny Application");
    }
    
@@ -5401,17 +5559,6 @@ public class TextEditingTarget implements
       } 
       
       PresentationState state = sessionInfo.getPresentationState();
-      
-      // if we are showing a tutorial then don't allow preview
-      if (state.isTutorial())
-      {
-         globalDisplay_.showMessage(
-               MessageDisplay.MSG_WARNING,
-               "Unable to Preview",
-               "R Presentations cannot be previewed when a Tutorial " +
-               "is active");
-         return;
-      }
       
       // if this presentation is already showing then just activate 
       if (state.isActive() && 
@@ -5706,7 +5853,7 @@ public class TextEditingTarget implements
       String defaultAuthor = docUpdateSentinel_.getProperty(NOTEBOOK_AUTHOR);
       if (StringUtil.isNullOrEmpty(defaultAuthor))
       {
-         defaultAuthor = prefs_.compileNotebookOptions().getValue().getAuthor();
+         defaultAuthor = state_.compileRNotebookPrefs().getValue().getAuthor();
          if (StringUtil.isNullOrEmpty(defaultAuthor))
             defaultAuthor = session_.getSessionInfo().getUserIdentity();
       }
@@ -5715,7 +5862,7 @@ public class TextEditingTarget implements
       String defaultType = docUpdateSentinel_.getProperty(NOTEBOOK_TYPE);
       if (StringUtil.isNullOrEmpty(defaultType))
       {
-         defaultType = prefs_.compileNotebookOptions().getValue().getType();
+         defaultType = state_.compileRNotebookPrefs().getValue().getType();
          if (StringUtil.isNullOrEmpty(defaultType))
             defaultType = CompileNotebookOptions.TYPE_DEFAULT;
       }
@@ -5763,10 +5910,10 @@ public class TextEditingTarget implements
                                           input.getNotebookType());
             if (!CompileNotebookPrefs.areEqual(
                                   prefs, 
-                                  prefs_.compileNotebookOptions().getValue()))
+                                  state_.compileRNotebookPrefs().getValue().cast()))
             {
-               prefs_.compileNotebookOptions().setGlobalValue(prefs);
-               prefs_.writeUIPrefs();
+               state_.compileRNotebookPrefs().setGlobalValue(prefs.cast());
+               state_.writeState();
             }
          }
       }
@@ -5815,12 +5962,12 @@ public class TextEditingTarget implements
    @Handler
    void onCompilePDF()
    {
-      String pdfPreview = prefs_.pdfPreview().getValue();
-      boolean showPdf = !pdfPreview.equals(UIPrefsAccessor.PDF_PREVIEW_NONE);
+      String pdfPreview = prefs_.pdfPreviewer().getValue();
+      boolean showPdf = !pdfPreview.equals(UserPrefs.PDF_PREVIEWER_NONE);
       boolean useInternalPreview = 
-            pdfPreview.equals(UIPrefsAccessor.PDF_PREVIEW_RSTUDIO);
+            pdfPreview.equals(UserPrefs.PDF_PREVIEWER_RSTUDIO);
       boolean useDesktopSynctexPreview = 
-            pdfPreview.equals(UIPrefsAccessor.PDF_PREVIEW_DESKTOP_SYNCTEX) &&
+            pdfPreview.equals(UserPrefs.PDF_PREVIEWER_DESKTOP_SYNCTEX) &&
             Desktop.isDesktop();
       
       String action = new String();
@@ -6637,7 +6784,7 @@ public class TextEditingTarget implements
    
    public static void registerPrefs(
                      ArrayList<HandlerRegistration> releaseOnDismiss,
-                     UIPrefs prefs,
+                     UserPrefs prefs,
                      ProjectConfig projectConfig,
                      DocDisplay docDisplay,
                      final SourceDocument sourceDoc)
@@ -6661,7 +6808,7 @@ public class TextEditingTarget implements
    
    public static void registerPrefs(
                      ArrayList<HandlerRegistration> releaseOnDismiss,
-                     UIPrefs prefs,
+                     UserPrefs prefs,
                      final ProjectConfig projectConfig,
                      final DocDisplay docDisplay,
                      final PrefsContext context)
@@ -6716,7 +6863,7 @@ public class TextEditingTarget implements
                public void execute(Boolean arg) {
                   docDisplay.setBlinkingCursor(arg);
                }}));
-      releaseOnDismiss.add(prefs.printMarginColumn().bind(
+      releaseOnDismiss.add(prefs.marginColumn().bind(
             new CommandWithArg<Integer>() {
                public void execute(Integer arg) {
                   docDisplay.setPrintMarginColumn(arg);
@@ -6741,27 +6888,27 @@ public class TextEditingTarget implements
                public void execute(Boolean arg) {
                   docDisplay.setHighlightRFunctionCalls(arg);
                }}));
-      releaseOnDismiss.add(prefs.useVimMode().bind(
-            new CommandWithArg<Boolean>() {
-               public void execute(Boolean arg) {
-                  docDisplay.setUseVimMode(arg);
+      releaseOnDismiss.add(prefs.editorKeybindings().bind(
+            new CommandWithArg<String>() {
+               public void execute(String arg) {
+                  docDisplay.setUseVimMode(arg == UserPrefs.EDITOR_KEYBINDINGS_VIM);
                }}));
-      releaseOnDismiss.add(prefs.enableEmacsKeybindings().bind(
-            new CommandWithArg<Boolean>() {
-               public void execute(Boolean arg) {
-                  docDisplay.setUseEmacsKeybindings(arg);
+      releaseOnDismiss.add(prefs.editorKeybindings().bind(
+            new CommandWithArg<String>() {
+               public void execute(String arg) {
+                  docDisplay.setUseEmacsKeybindings(arg == UserPrefs.EDITOR_KEYBINDINGS_EMACS);
                }}));
-      releaseOnDismiss.add(prefs.codeCompleteOther().bind(
+      releaseOnDismiss.add(prefs.codeCompletionOther().bind(
             new CommandWithArg<String>() {
                public void execute(String arg) {
                   docDisplay.syncCompletionPrefs();
                }}));
-      releaseOnDismiss.add(prefs.alwaysCompleteCharacters().bind(
+      releaseOnDismiss.add(prefs.codeCompletionCharacters().bind(
             new CommandWithArg<Integer>() {
                public void execute(Integer arg) {
                   docDisplay.syncCompletionPrefs();
                }}));
-      releaseOnDismiss.add(prefs.alwaysCompleteDelayMs().bind(
+      releaseOnDismiss.add(prefs.codeCompletionDelay().bind(
             new CommandWithArg<Integer>() {
                public void execute(Integer arg) {
                   docDisplay.syncCompletionPrefs();
@@ -6797,7 +6944,7 @@ public class TextEditingTarget implements
             new CommandWithArg<String>() {
                public void execute(String style)
                {
-                  docDisplay.setFoldStyle(style);
+                  docDisplay.setFoldStyle(FoldStyle.fromPref(style));
                }}));
       releaseOnDismiss.add(prefs.surroundSelection().bind(
             new CommandWithArg<String>() {
@@ -6915,8 +7062,8 @@ public class TextEditingTarget implements
    
    public void setPreferredOutlineWidgetSize(double size)
    {
-      prefs_.preferredDocumentOutlineWidth().setGlobalValue((int) size);
-      prefs_.writeUIPrefs();
+      state_.documentOutlineWidth().setGlobalValue((int) size);
+      state_.writeState();
       docUpdateSentinel_.setProperty(DOC_OUTLINE_SIZE, size + "");
    }
    
@@ -6924,7 +7071,7 @@ public class TextEditingTarget implements
    {
       String property = docUpdateSentinel_.getProperty(DOC_OUTLINE_SIZE);
       if (StringUtil.isNullOrEmpty(property))
-         return prefs_.preferredDocumentOutlineWidth().getGlobalValue();
+         return state_.documentOutlineWidth().getGlobalValue();
       
       try {
          double value = Double.parseDouble(property);
@@ -6941,7 +7088,7 @@ public class TextEditingTarget implements
          
          return value;
       } catch (Exception e) {
-         return prefs_.preferredDocumentOutlineWidth().getGlobalValue();
+         return state_.documentOutlineWidth().getGlobalValue();
       }
    }
    
@@ -6954,7 +7101,7 @@ public class TextEditingTarget implements
    {
       String property = docUpdateSentinel_.getProperty(DOC_OUTLINE_VISIBLE);
       return StringUtil.isNullOrEmpty(property)
-            ? (getTextFileType().isRmd() && prefs_.showDocumentOutlineRmd().getGlobalValue())
+            ? (getTextFileType().isRmd() && prefs_.showDocOutlineRmd().getGlobalValue())
             : Integer.parseInt(property) > 0;
    }
    
@@ -6975,7 +7122,7 @@ public class TextEditingTarget implements
    
    /**
     * Updates the path of the file loaded in the editor, as though the user
-    * had just saved the file at the new paht.
+    * had just saved the file at the new path.
     * 
     * @param path New path for the editor
     */
@@ -7247,33 +7394,28 @@ public class TextEditingTarget implements
    @Handler
    void onShinyCompareTest()
    {
-      final String appDir = FilePathUtils.parent(FilePathUtils.dirFromFile(docUpdateSentinel_.getPath()));
-      final String testName = FilePathUtils.fileNameSansExtension(docUpdateSentinel_.getPath());
-
-      server_.hasShinyTestResults(appDir, testName, new ServerRequestCallback<Boolean>() {
+      final String testFile = docUpdateSentinel_.getPath();
+      server_.hasShinyTestResults(testFile, new ServerRequestCallback<ShinyTestResults>() {
          @Override
-         public void onResponseReceived(Boolean hasResults)
+         public void onResponseReceived(ShinyTestResults results)
          {
-            if (!hasResults) {
+            if (!results.testDirExists)
+            {
                globalDisplay_.showMessage(
                   GlobalDisplay.MSG_INFO, 
                   "No Failed Results", 
                   "There are no failed tests to compare."
                );
             }
-            else {
-               checkTestPackageDependencies(
-                  new Command()
-                  {
-                     @Override
-                     public void execute()
-                     {
-                        String code = "shinytest::viewTestDiff(\"" + appDir + "\", \"" + testName + "\")";
-                        events_.fireEvent(new SendToConsoleEvent(code, true));
-                     }
-                  },
-                  false
-               );
+            else
+            {
+               checkTestPackageDependencies(() -> 
+               {
+                  String testName = FilePathUtils.fileNameSansExtension(testFile);
+                  String code = "shinytest::viewTestDiff(\"" + 
+                        results.appDir + "\", \"" + testName + "\")";
+                  events_.fireEvent(new SendToConsoleEvent(code, true));
+               }, false);
             }
          }
 
@@ -7285,10 +7427,23 @@ public class TextEditingTarget implements
          }
       });
    }
+
+   public TextEditingTargetSpelling getSpellingTarget() { return this.spelling_; }
    
+   private void nudgeAutosave()
+   {
+      // Cancel any existing autosave timer
+      autoSaveTimer_.cancel();
+      
+      // Start new timer if enabled
+      if (prefs_.autoSaveOnIdle().getValue() == UserPrefs.AUTO_SAVE_ON_IDLE_COMMIT)
+         autoSaveTimer_.schedule(prefs_.autoSaveMs());
+   }
+
    private StatusBar statusBar_;
    private final DocDisplay docDisplay_;
-   private final UIPrefs prefs_;
+   private final UserPrefs prefs_;
+   private final UserState state_;
    private Display view_;
    private final Commands commands_;
    private SourceServerOperations server_;
@@ -7349,7 +7504,60 @@ public class TextEditingTarget implements
    private boolean isWaitingForUserResponseToExternalEdit_ = false;
    private EditingTargetCodeExecution codeExecution_;
    
-   
+   // Timer for autosave
+   private Timer autoSaveTimer_ = new Timer()
+   {
+      @Override
+      public void run()
+      {
+         // It's unlikely, but if we attempt to autosave while running a
+         // previous autosave, just nudge the timer so we try again.
+         if (saving_ != 0)
+         {
+            // If we've been trying to save for more than 5 seconds, we won't
+            // nudge (just fall through and we'll attempt again below)
+            if (System.currentTimeMillis() - saving_ < 5000)
+            {
+               nudgeAutosave();
+               return;
+            }
+         }
+         
+         if (getPath() == null)
+         {
+            // This editor isn't file-backed yet, so there's no save to do.
+            return;
+         }
+         
+         if (docDisplay_.hasActiveCollabSession())
+         {
+            // Everyone's autosave gets turned off during a collab session --
+            // otherwise the autosaves all fire at once and fight
+            return;
+         }
+
+         // Save (and keep track of when we initiated it)
+         saving_ = System.currentTimeMillis();
+         try
+         {
+            save(() ->
+            {
+               saving_ = 0;
+            });
+         }
+         catch(Exception e)
+         {
+            // Autosave exceptions are logged rather than displayed
+            saving_ = 0;
+            Debug.logException(e);
+         }
+      }
+      
+      // The time at which we attempted the current autosave operation, or zero
+      // if no autosave operation is in progress.
+      private long saving_ = 0;
+   };
+
    private SourcePosition debugStartPos_ = null;
    private SourcePosition debugEndPos_ = null;
    private boolean isDebugWarningVisible_ = false;

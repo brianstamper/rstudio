@@ -7,9 +7,9 @@ import com.google.gwt.core.client.JsArray;
 import com.google.gwt.core.client.JsArrayString;
 
 import org.rstudio.core.client.BrowseCap;
+import org.rstudio.core.client.command.KeyCombination;
+import org.rstudio.core.client.command.KeySequence;
 import org.rstudio.core.client.command.KeyboardHelper;
-import org.rstudio.core.client.command.KeyboardShortcut.KeyCombination;
-import org.rstudio.core.client.command.KeyboardShortcut.KeySequence;
 import org.rstudio.core.client.js.JsObject;
 import org.rstudio.core.client.js.JsUtil;
 
@@ -152,7 +152,7 @@ public class AceCommandManager extends JavaScriptObject
       var command = this.byName[id];
       
       // The command can be null if it's an excluded command, or
-      // the user has manually editted their keybinding file and
+      // the user has manually edited their keybinding file and
       // selected the ID of a non-existent command.
       if (command == null)
          return;

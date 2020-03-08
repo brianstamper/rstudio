@@ -1,7 +1,7 @@
 /*
  * ClientStateUpdater.java
  *
- * Copyright (C) 2009-19 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -58,11 +58,7 @@ public class ClientStateUpdater extends TimeBufferedCommand
       {
          public void onPushClientState(PushClientStateEvent event)
          {
-            // Don't allow active pushes until after the initial interval
-            // has elapsed. This lets us avoid storms of requests during
-            // startup.
-            if (lastExecuted_ != null)
-               nudge();
+            reschedule();
          }
       });
 
@@ -157,8 +153,9 @@ public class ClientStateUpdater extends TimeBufferedCommand
    {
       if (barrierToken_ != null)
          barrierToken_.release();
+      
       if (shouldSchedulePassive)
-         schedulePassive();
+         reschedule();
    }
 
    private static final int INITIAL_INTERVAL_MILLIS = 2000;

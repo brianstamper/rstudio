@@ -1,7 +1,7 @@
 /*
  * PosixShellUtilsTests.cpp
  *
- * Copyright (C) 2009-16 by RStudio, Inc.
+ * Copyright (C) 2009-16 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -19,7 +19,7 @@
 
 #include <iostream>
 
-#include <core/Error.hpp>
+#include <shared_core/Error.hpp>
 
 #include <core/system/ShellUtils.hpp>
 
@@ -28,7 +28,7 @@ namespace core {
 namespace shell_utils {
 namespace tests {
 
-context("Shell Escaping")
+test_context("Shell Escaping")
 {
    test_that("Commands with special characters are escaped")
    {

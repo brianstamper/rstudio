@@ -1,7 +1,7 @@
 /*
  * PrivateCommandTests.cpp
  *
- * Copyright (C) 2009-17 by RStudio, Inc.
+ * Copyright (C) 2009-17 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -33,7 +33,7 @@ namespace {
 
 } // anonymous namespace
 
-context("Private Terminal Command Tests")
+test_context("Private Terminal Command Tests")
 {
    // ProcessOptions impl that tracks calls
    class OpsHarness : public system::ProcessOperations

@@ -1,7 +1,7 @@
 /*
  * ApplicationServerOperations.java
  *
- * Copyright (C) 2009-19 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -28,6 +28,7 @@ public interface ApplicationServerOperations extends PrefsServerOperations
 {   
    // establish new session for this client
    void clientInit(String baseURL, 
+           SessionInitOptions options,
            ServerRequestCallback<SessionInfo> requestCallback);
 
    // get current connection status for a session job
@@ -82,7 +83,9 @@ public interface ApplicationServerOperations extends PrefsServerOperations
 
    void getProductInfo(
          ServerRequestCallback<ProductInfo> requestCallback);
-   
+
+   void getProductNotice(ServerRequestCallback<ProductNotice> requestCallback);
+
    void getNewSessionUrl(String hostPageUrl,
          boolean isProject, 
          String directory,

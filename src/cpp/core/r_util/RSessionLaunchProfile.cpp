@@ -1,7 +1,7 @@
 /*
  * RSessionLaunchProfile.cpp
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -15,9 +15,7 @@
 
 #include <core/r_util/RSessionLaunchProfile.hpp>
 
-#include <boost/foreach.hpp>
-
-#include <core/SafeConvert.hpp>
+#include <shared_core/SafeConvert.hpp>
 
 #include <core/system/PosixSched.hpp>
 
@@ -59,12 +57,12 @@ Error cpuAffinityFromJson(const json::Array& affinityJson,
 {
    pAffinity->clear();
 
-   BOOST_FOREACH(const json::Value& val, affinityJson)
+   for (const json::Value& val : affinityJson)
    {
       if (!json::isType<bool>(val))
          return Error(json::errc::ParamTypeMismatch, ERROR_LOCATION);
 
-      pAffinity->push_back(val.get_bool());
+      pAffinity->push_back(val.getBool());
    }
 
    return Success();
@@ -92,8 +90,8 @@ json::Object sessionLaunchProfileToJson(const SessionLaunchProfile& profile)
    profileJson["password"] = profile.password;
    profileJson["executablePath"] = profile.executablePath;
    json::Object configJson;
-   configJson["args"] = json::toJsonObject(profile.config.args);
-   configJson["environment"] = json::toJsonObject(profile.config.environment);
+   configJson["args"] = json::Array(profile.config.args);
+   configJson["environment"] = json::Object(profile.config.environment);
    configJson["stdInput"] = profile.config.stdInput;
    configJson["stdStreamBehavior"] = profile.config.stdStreamBehavior;
    configJson["priority"] = profile.config.limits.priority;
@@ -130,7 +128,8 @@ SessionLaunchProfile sessionLaunchProfileFromJson(
       LOG_ERROR(error);
 
    // read config object
-   json::Object argsJson, envJson;
+   json::Object envJson;
+   json::Array argsJson;
    std::string stdInput;
    int stdStreamBehavior = 0;
    int priority = 0;
@@ -166,8 +165,8 @@ SessionLaunchProfile sessionLaunchProfileFromJson(
    }
 
    // populate config
-   profile.config.args = json::optionsFromJson(argsJson);
-   profile.config.environment = json::optionsFromJson(envJson);
+   profile.config.args = argsJson.toStringPairList();
+   profile.config.environment = envJson.toStringPairList();
    profile.config.stdInput = stdInput;
    profile.config.stdStreamBehavior =
             static_cast<core::system::StdStreamBehavior>(stdStreamBehavior);

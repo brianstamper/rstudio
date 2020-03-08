@@ -1,7 +1,7 @@
 /*
  * SessionPath.cpp
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -18,12 +18,12 @@
 #include <string>
 #include <vector>
 
-#include <boost/regex.hpp>
 #include <boost/bind.hpp>
 
-#include <core/Error.hpp>
+#include <core/Algorithm.hpp>
+#include <shared_core/Error.hpp>
 #include <core/Log.hpp>
-#include <core/FilePath.hpp>
+#include <shared_core/FilePath.hpp>
 #include <core/FileSerializer.hpp>
 
 #include <core/system/System.hpp>
@@ -49,7 +49,7 @@ Error readPathsFromFile(const FilePath& filePath,
    Error error = core::readStringVectorFromFile(filePath, &paths);
    if (error)
    {
-      error.addProperty("path-source", filePath.absolutePath());
+      error.addProperty("path-source", filePath.getAbsolutePath());
       return error;
    }
 
@@ -66,19 +66,25 @@ void safeReadPathsFromFile(const FilePath& filePath,
       LOG_ERROR(error);
 }
 
-void addToPathIfNecessary(const std::string& entry, std::string* pPath)
+void addToPathIfNecessary(
+      const std::string& entry,
+      std::vector<std::string>* pPathComponents)
 {
-   // guard against user input which may not parse as a valid regular expression
-   try
+   // tolerate paths with trailing slashes
+   for (std::string item : {entry, entry + "/"})
    {
-      if (!regex_search(*pPath, boost::regex("(^|:)" + entry + "/?($|:)")))
-      {
-         if (!pPath->empty())
-            pPath->push_back(':');
-         pPath->append(entry);
-      }
+      auto it = std::find(
+               pPathComponents->begin(),
+               pPathComponents->end(),
+               item);
+
+      // if we find the path component, bail (no need to add to PATH)
+      if (it != pPathComponents->end())
+         return;
    }
-   CATCH_UNEXPECTED_EXCEPTION;
+
+   // failed to find PATH component; add it to the PATH
+   pPathComponents->push_back(entry);
 }
 
 } // anonymous namespace
@@ -97,7 +103,7 @@ Error initialize()
    {
       // enumerate the children
       std::vector<FilePath> pathsDChildren;
-      Error error = pathsD.children(&pathsDChildren);
+      Error error = pathsD.getChildren(pathsDChildren);
       if (error)
          LOG_ERROR(error);
 
@@ -109,27 +115,30 @@ Error initialize()
    }
 
    // build the PATH
-   std::string path = core::system::getenv("PATH");
+   std::vector<std::string> parts =
+         core::algorithm::split(core::system::getenv("PATH"), ":");
+
+   // add in components from paths.d etc.
    std::for_each(paths.begin(),
                  paths.end(),
-                 boost::bind(addToPathIfNecessary, _1, &path));
+                 boost::bind(addToPathIfNecessary, _1, &parts));
 
    // do we need to add /Library/TeX/texbin or /usr/texbin or (sometimes texlive
    // doesn't get this written into /etc/paths.d)
    FilePath libraryTexbinPath("/Library/TeX/texbin");
    if (libraryTexbinPath.exists())
-      addToPathIfNecessary(libraryTexbinPath.absolutePath(), &path);
+      addToPathIfNecessary(libraryTexbinPath.getAbsolutePath(), &parts);
    FilePath texbinPath("/usr/texbin");
    if (texbinPath.exists())
-      addToPathIfNecessary(texbinPath.absolutePath(), &path);
+      addToPathIfNecessary(texbinPath.getAbsolutePath(), &parts);
 
    // add /opt/local/bin if necessary
    FilePath optLocalBinPath("/opt/local/bin");
    if (optLocalBinPath.exists())
-      addToPathIfNecessary(optLocalBinPath.absolutePath(), &path);
+      addToPathIfNecessary(optLocalBinPath.getAbsolutePath(), &parts);
 
    // set the path
-   core::system::setenv("PATH", path);
+   core::system::setenv("PATH", core::algorithm::join(parts, ":"));
 
    return Success();
 

@@ -1,7 +1,7 @@
 /*
  * RegexUtil.java
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -19,50 +19,35 @@ import org.rstudio.core.client.regex.Pattern;
 // We do lazy initialization of all the regex singleton strings here
 public class RegexUtil
 {
-   public static final String letter()
-   {
-      if (LETTER == null)
-         LETTER = constructLetter();
-      return LETTER;
-   }
-   
    public static final String wordCharacter()
    {
-      if (WORD_CHARACTER == null)
-         WORD_CHARACTER = constructWordCharacter();
       return WORD_CHARACTER;
    }
    
-   public static boolean isSyntacticRIdentifier(String identifier)
+   private static final void initialize()
    {
-      if (SYNTACTIC_R_IDENTIFIER == null)
-         SYNTACTIC_R_IDENTIFIER = constructSyntacticRIdentifierRegex();
+      WORD_CHARACTER = makeWordCharacter();
+   }
+   
+   public static final boolean isSyntacticRIdentifier(String identifier)
+   {
+      String regex =
+            "^" +
+            "[" + WORD_CHARACTER + ".]" +
+            "[" + WORD_CHARACTER +  "._]*" +
+            "$";
       
-      return identifier.matches(SYNTACTIC_R_IDENTIFIER);
+      Pattern pattern = Pattern.create(regex, "");
+      return pattern.test(identifier);
    }
    
-   private static final native String constructLetter() /*-{
+   private static final native String makeWordCharacter()
+   /*-{
       var unicode = $wnd.require("ace/unicode");
-      return unicode.packages.L;
+      return unicode.wordChars;
    }-*/;
-   
-   private static final native String constructWordCharacter() /*-{
-      var unicode = $wnd.require("ace/unicode");
-      return unicode.packages.L +
-             unicode.packages.N;
-   }-*/;
-   
-   private static final String constructSyntacticRIdentifierRegex()
-   {
-      return
-            "[" + letter() + ".]" +
-            "[" + wordCharacter() + "._]*";
-   }
    
    private static String WORD_CHARACTER = null;
-   private static String LETTER = null;
-   
-   private static String SYNTACTIC_R_IDENTIFIER = null;
    
    public static final Pattern RE_RMARKDOWN_CHUNK_BEGIN =
          Pattern.create("^\\s*```\\{(.*?)\\}\\s*$", "");
@@ -81,5 +66,7 @@ public class RegexUtil
    
    public static final Pattern RE_SWEAVE_CHUNK_END =
          Pattern.create("^\\s*@\\s*$", "");
+   
+   static { initialize(); }
    
 }

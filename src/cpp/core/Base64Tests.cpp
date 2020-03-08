@@ -1,7 +1,7 @@
 /*
  * Base64Tests.cpp
  *
- * Copyright (C) 2009-16 by RStudio, Inc.
+ * Copyright (C) 2009-16 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -15,7 +15,7 @@
 
 #include <tests/TestThat.hpp>
 
-#include <core/Error.hpp>
+#include <shared_core/Error.hpp>
 #include <core/Base64.hpp>
 #include <core/StringUtils.hpp>
 
@@ -23,7 +23,7 @@ namespace rstudio {
 namespace core {
 namespace base64 {
 
-context("Base64 Encoding")
+test_context("Base64 Encoding")
 {
    std::string encoded;
    test_that("Various small strings encode correctly")
@@ -80,11 +80,11 @@ context("Base64 Encoding")
          
          std::string encoded;
          error = encode(random, &encoded);
-         expect_true(error == Success());
+         expect_true(!error);
          
          std::string decoded;
          error = decode(encoded, &decoded);
-         expect_true(error == Success());
+         expect_true(!error);
          
          expect_true(random == decoded);
       }

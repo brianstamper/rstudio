@@ -1,7 +1,7 @@
 /*
  * PackageLibraryUtils.java
  *
- * Copyright (C) 2009-14 by RStudio, Inc.
+ * Copyright (C) 2009-14 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -62,7 +62,7 @@ public class PackageLibraryUtils
    public static String nameOfLibraryType(PackageLibraryType type)
    {
       if (type == PackageLibraryType.Project)
-         return "Packrat Library";
+         return "Project Library";
       else if (type == PackageLibraryType.User)
          return "User Library";
       else if (type == PackageLibraryType.System)

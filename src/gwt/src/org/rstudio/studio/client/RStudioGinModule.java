@@ -1,7 +1,7 @@
 /*
  * RStudioGinModule.java
  *
- * Copyright (C) 2009-18 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -20,10 +20,16 @@ import com.google.gwt.user.client.ui.Widget;
 import com.google.inject.Singleton;
 import com.google.inject.name.Names;
 
+import org.rstudio.core.client.VirtualConsole;
+import org.rstudio.core.client.VirtualConsole.PreferencesImpl;
+import org.rstudio.core.client.VirtualConsoleFactory;
+import org.rstudio.studio.client.application.events.FireEvents;
 import org.rstudio.core.client.command.ApplicationCommandManager;
 import org.rstudio.core.client.command.EditorCommandManager;
 import org.rstudio.core.client.command.ShortcutViewer;
 import org.rstudio.core.client.command.UserCommandManager;
+import org.rstudio.core.client.dom.BrowserEventWorkarounds;
+import org.rstudio.core.client.polyfill.FastestSmallestTextEncoderDecoder;
 import org.rstudio.core.client.HtmlMessageListener;
 import org.rstudio.studio.client.application.ApplicationInterrupt;
 import org.rstudio.studio.client.application.ApplicationQuit;
@@ -88,6 +94,7 @@ import org.rstudio.studio.client.projects.Projects;
 import org.rstudio.studio.client.projects.model.ProjectTemplateRegistryProvider;
 import org.rstudio.studio.client.projects.model.ProjectTemplateServerOperations;
 import org.rstudio.studio.client.projects.model.ProjectsServerOperations;
+import org.rstudio.studio.client.renv.model.RenvServerOperations;
 import org.rstudio.studio.client.rmarkdown.RmdOutput;
 import org.rstudio.studio.client.rmarkdown.RmdOutputView;
 import org.rstudio.studio.client.rmarkdown.model.RMarkdownServerOperations;
@@ -109,6 +116,8 @@ import org.rstudio.studio.client.sql.model.SqlServerOperations;
 import org.rstudio.studio.client.vcs.VCSApplicationView;
 import org.rstudio.studio.client.vcs.ui.VCSApplicationWindow;
 import org.rstudio.studio.client.workbench.ClientStateUpdater;
+import org.rstudio.studio.client.workbench.ShowDOMElementIDs;
+import org.rstudio.studio.client.workbench.UserInterfaceHighlighter;
 import org.rstudio.studio.client.workbench.WorkbenchContext;
 import org.rstudio.studio.client.workbench.WorkbenchListManager;
 import org.rstudio.studio.client.workbench.WorkbenchMainView;
@@ -141,10 +150,6 @@ import org.rstudio.studio.client.workbench.views.console.model.ConsoleServerOper
 import org.rstudio.studio.client.workbench.views.console.shell.Shell;
 import org.rstudio.studio.client.workbench.views.console.shell.ShellPane;
 import org.rstudio.studio.client.workbench.views.console.shell.assist.HelpStrategy;
-import org.rstudio.studio.client.workbench.views.data.Data;
-import org.rstudio.studio.client.workbench.views.data.DataPane;
-import org.rstudio.studio.client.workbench.views.data.DataTab;
-import org.rstudio.studio.client.workbench.views.data.model.DataServerOperations;
 import org.rstudio.studio.client.workbench.views.edit.Edit;
 import org.rstudio.studio.client.workbench.views.edit.model.EditServerOperations;
 import org.rstudio.studio.client.workbench.views.edit.ui.EditView;
@@ -159,6 +164,8 @@ import org.rstudio.studio.client.workbench.views.files.FilesTab;
 import org.rstudio.studio.client.workbench.views.files.model.FilesServerOperations;
 import org.rstudio.studio.client.workbench.views.jobs.LauncherJobsPresenter;
 import org.rstudio.studio.client.workbench.views.jobs.LauncherJobsTab;
+import org.rstudio.studio.client.workbench.views.jobs.view.JobItem;
+import org.rstudio.studio.client.workbench.views.jobs.view.JobItemFactory;
 import org.rstudio.studio.client.workbench.views.jobs.view.LauncherJobsPane;
 import org.rstudio.studio.client.workbench.views.output.data.DataOutputTab;
 import org.rstudio.studio.client.workbench.views.output.find.FindOutputPane;
@@ -236,6 +243,10 @@ import org.rstudio.studio.client.workbench.views.source.model.TexServerOperation
 import org.rstudio.studio.client.workbench.views.terminal.TerminalPane;
 import org.rstudio.studio.client.workbench.views.terminal.TerminalTab;
 import org.rstudio.studio.client.workbench.views.terminal.TerminalTabPresenter;
+import org.rstudio.studio.client.workbench.views.tutorial.TutorialPane;
+import org.rstudio.studio.client.workbench.views.tutorial.TutorialPresenter;
+import org.rstudio.studio.client.workbench.views.tutorial.TutorialServerOperations;
+import org.rstudio.studio.client.workbench.views.tutorial.TutorialTab;
 import org.rstudio.studio.client.workbench.views.vcs.VCSTab;
 import org.rstudio.studio.client.workbench.views.vcs.common.diff.LineTablePresenter;
 import org.rstudio.studio.client.workbench.views.vcs.common.diff.LineTableView;
@@ -281,6 +292,8 @@ public class RStudioGinModule extends AbstractGinModule
       bind(RnwWeaveRegistry.class).asEagerSingleton();
       bind(LatexProgramRegistry.class).asEagerSingleton();
       bind(Commands.class).in(Singleton.class);
+      bind(UserInterfaceHighlighter.class).asEagerSingleton();
+      bind(ShowDOMElementIDs.class).asEagerSingleton();
       bind(DefaultCRANMirror.class).in(Singleton.class);
       bind(ChooseFile.class).in(Singleton.class);
       bind(ConsoleDispatcher.class).in(Singleton.class);
@@ -312,6 +325,8 @@ public class RStudioGinModule extends AbstractGinModule
       bind(JavaScriptEventHistory.class).asEagerSingleton();
       bind(JobManager.class).asEagerSingleton();
       bind(HtmlMessageListener.class).asEagerSingleton();
+      bind(BrowserEventWorkarounds.class).asEagerSingleton();
+      bind(FastestSmallestTextEncoderDecoder.class).asEagerSingleton();
 
       bind(ApplicationView.class).to(ApplicationWindow.class)
             .in(Singleton.class) ;
@@ -336,7 +351,6 @@ public class RStudioGinModule extends AbstractGinModule
       bind(Source.Display.class).to(SourcePane.class);
       bind(TerminalTabPresenter.Display.class).to(TerminalPane.class);
       bind(History.Display.class).to(HistoryPane.class);
-      bind(Data.Display.class).to(DataPane.class);
       bind(Files.Display.class).to(FilesPane.class);
       bind(Plots.Display.class).to(PlotsPane.class);
       bind(Packages.Display.class).to(PackagesPane.class);
@@ -344,6 +358,7 @@ public class RStudioGinModule extends AbstractGinModule
       bind(Edit.Display.class).to(EditView.class);
       bind(GitPresenter.Display.class).to(GitPane.class);
       bind(SVNPresenter.Display.class).to(SVNPane.class);
+      bind(TutorialPresenter.Display.class).to(TutorialPane.class);
       bind(BuildPresenter.Display.class).to(BuildPane.class);
       bind(Presentation.Display.class).to(PresentationPane.class);
       bind(EnvironmentPresenter.Display.class).to(EnvironmentPane.class);
@@ -358,7 +373,6 @@ public class RStudioGinModule extends AbstractGinModule
       bind(LauncherJobsPresenter.Display.class).to(LauncherJobsPane.class);
       bind(DataOutputPresenter.Display.class).to(DataOutputPane.class);
       bindTab("History", HistoryTab.class);
-      bindTab("Data", DataTab.class);
       bindTab("Files", FilesTab.class);
       bindTab("Plots", PlotsTab.class);
       bindTab("Packages", PackagesTab.class);
@@ -380,6 +394,7 @@ public class RStudioGinModule extends AbstractGinModule
       bindTab("Jobs", JobsTab.class);
       bindTab("Launcher", LauncherJobsTab.class);
       bindTab("Data Output", DataOutputTab.class);
+      bindTab("Tutorial", TutorialTab.class);
 
       bind(Shell.Display.class).to(ShellPane.class) ;
            
@@ -406,7 +421,6 @@ public class RStudioGinModule extends AbstractGinModule
       bind(CodeToolsServerOperations.class).to(RemoteServer.class) ;
       bind(ConsoleServerOperations.class).to(RemoteServer.class) ;
       bind(SourceServerOperations.class).to(RemoteServer.class) ;
-      bind(DataServerOperations.class).to(RemoteServer.class);
       bind(FilesServerOperations.class).to(RemoteServer.class) ;
       bind(HistoryServerOperations.class).to(RemoteServer.class) ;
       bind(PlotsServerOperations.class).to(RemoteServer.class) ;
@@ -444,6 +458,7 @@ public class RStudioGinModule extends AbstractGinModule
       bind(RMarkdownServerOperations.class).to(RemoteServer.class);
       bind(DependencyServerOperations.class).to(RemoteServer.class);
       bind(PackratServerOperations.class).to(RemoteServer.class);
+      bind(RenvServerOperations.class).to(RemoteServer.class);
       bind(CppServerOperations.class).to(RemoteServer.class);
       bind(MarkersServerOperations.class).to(RemoteServer.class);
       bind(LintServerOperations.class).to(RemoteServer.class);
@@ -456,6 +471,7 @@ public class RStudioGinModule extends AbstractGinModule
       bind(DesktopInfo.class).asEagerSingleton();
       bind(SecondaryReposServerOperations.class).to(RemoteServer.class);
       bind(ThemeServerOperations.class).to(RemoteServer.class);
+      bind(TutorialServerOperations.class).to(RemoteServer.class);
 
       bind(WorkbenchMainView.class).to(WorkbenchScreen.class) ;
 
@@ -471,6 +487,11 @@ public class RStudioGinModule extends AbstractGinModule
       bind(RStudioAPIServerOperations.class).to(RemoteServer.class);
 
       bind(AskSecretManager.class).in(Singleton.class);
+      bind(VirtualConsole.Preferences.class).to(PreferencesImpl.class);
+      bind(JobItem.Preferences.class).to(JobItem.PreferencesImpl.class);
+      install(new GinFactoryModuleBuilder().build(VirtualConsoleFactory.class));
+      install(new GinFactoryModuleBuilder().build(JobItemFactory.class));
+      bind(FireEvents.class).to(EventBus.class);
    }
 
    private <T extends WorkbenchTab> void bindTab(String name, Class<T> clazz)

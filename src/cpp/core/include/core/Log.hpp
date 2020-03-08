@@ -1,7 +1,7 @@
 /*
  * Log.hpp
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -16,53 +16,77 @@
 #ifndef CORE_LOG_HPP
 #define CORE_LOG_HPP
 
+#include <shared_core/Logger.hpp>
+
 #include <string>
+
+#include <shared_core/Error.hpp>
+#include <boost/function.hpp>
 
 namespace rstudio {
 namespace core {
-
-class Error ;
-class ErrorLocation ;
-   
 namespace log {
 
-extern const char DELIM;
+enum class LoggerType
+{
+   kStdErr = 0,
+   kSysLog = 1,
+   kFile = 2
+};
 
-std::string cleanDelims(const std::string& source);
+void logDebugAction(const boost::function<std::string()>& action,
+                    const ErrorLocation& loggedFromLocation = ErrorLocation());
 
-void logError(const Error& error, const ErrorLocation& loggedFromLocation) ;
-   
-void logErrorMessage(const std::string& message, 
-                     const ErrorLocation& loggedFromlocation);
-   
-void logWarningMessage(const std::string& message,
-                       const ErrorLocation& loggedFromLocation);
-      
-void logInfoMessage(const std::string& message);
-   
-void logDebugMessage(const std::string& message);
-   
-std::string errorAsLogEntry(const Error& error);  
-  
-} // namespace log
-} // namespace core 
-} // namespace rstudio
+void logDebugAction(const std::string& logSection,
+                    const boost::function<std::string()>& action,
+                    const ErrorLocation& loggedFromLocation = ErrorLocation());
+
+std::string errorAsLogEntry(const Error& error);
 
 // Macros for automatic inclusion of ERROR_LOCATION and easy ability to 
 // compile out logging calls
 
-#define LOG_ERROR(error) rstudio::core::log::logError(error, ERROR_LOCATION)
+#define LOG_ERROR(error) rstudio::core::log::logError(error, \
+                                                      ERROR_LOCATION)
+
+#define LOG_ERROR_NAMED(logSection, error) rstudio::core::log::logError(logSection, \
+                                                                        error, \
+                                                                        ERROR_LOCATION)
 
 #define LOG_ERROR_MESSAGE(message) rstudio::core::log::logErrorMessage(message, \
-                                                              ERROR_LOCATION)
+                                                                       ERROR_LOCATION)
 
-#define LOG_WARNING_MESSAGE(message) rstudio::core::log::logWarningMessage( \
-                                                               message, \
-                                                               ERROR_LOCATION)
+#define LOG_ERROR_MESSAGE_NAMED(logSection, message) rstudio::core::log::logErrorMessage(message, \
+                                                                                         logSection, \
+                                                                                         ERROR_LOCATION)
+
+#define LOG_WARNING_MESSAGE(message) rstudio::core::log::logWarningMessage(message, \
+                                                                           ERROR_LOCATION)
+
+#define LOG_WARNING_MESSAGE_NAMED(logSection, message) rstudio::core::log::logWarningMessage(message, \
+                                                                                             logSection, \
+                                                                                             ERROR_LOCATION)
 
 #define LOG_INFO_MESSAGE(message) rstudio::core::log::logInfoMessage(message)
 
+#define LOG_INFO_MESSAGE_NAMED(logSection, message) rstudio::core::log::logInfoMessage(message, \
+                                                                                       logSection)
+
 #define LOG_DEBUG_MESSAGE(message) rstudio::core::log::logDebugMessage(message)
 
-#endif // CORE_LOG_HPP
+#define LOG_DEBUG_ACTION(action) rstudio::core::log::logDebugAction(action)
 
+#define LOG_DEBUG_MESSAGE_NAMED(logSection, message) rstudio::core::log::logDebugMessage(message, \
+                                                                                         logSection)
+
+#define LOG_DEBUG_ACTION_NAMED(logSection, action) rstudio::core::log::logDebugAction(logSection, \
+                                                                                      action)
+
+// define named logging sections
+#define kFileLockingLogSection "file-locking"
+
+} // namespace log
+} // namespace core
+} // namespace rstudio
+
+#endif // CORE_LOG_HPP

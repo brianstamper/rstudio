@@ -1,7 +1,7 @@
 /*
  * ChunkParserTests.cpp
  *
- * Copyright (C) 2017-18 by RStudio, Inc.
+ * Copyright (C) 2017-18 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -28,7 +28,7 @@ namespace tests {
 
 const std::string chunkEnd = "0\r\n\r\n";
 
-context("ChunkParserTests")
+test_context("ChunkParserTests")
 {
    test_that("Can parse one simple chunk with no chunk end")
    {

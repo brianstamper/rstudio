@@ -1,7 +1,7 @@
 /*
  * r_code_model.js
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -1191,6 +1191,7 @@ var RCodeModel = function(session, tokenizer,
    };
 
    this.getFoldWidget = function(session, foldStyle, row) {
+
       var foldToken = this.$getFoldToken(session, foldStyle, row);
       if (foldToken == null)
          return "";
@@ -1995,45 +1996,13 @@ var RCodeModel = function(session, tokenizer,
 
    this.$onDocChange = function(evt)
    {
-      var delta = evt.data;
+      if (evt.action === "insert")
+         this.$insertNewRows(evt.start.row, evt.end.row - evt.start.row);
+      else
+         this.$removeRows(evt.start.row, evt.end.row - evt.start.row);
 
-      if (delta.action === "insertLines")
-      {
-         this.$insertNewRows(delta.range.start.row,
-                             delta.range.end.row - delta.range.start.row);
-      }
-      else if (delta.action === "insertText")
-      {
-         if (this.$doc.isNewLine(delta.text))
-         {
-            this.$invalidateRow(delta.range.start.row);
-            this.$insertNewRows(delta.range.end.row, 1);
-         }
-         else
-         {
-            this.$invalidateRow(delta.range.start.row);
-         }
-      }
-      else if (delta.action === "removeLines")
-      {
-         this.$removeRows(delta.range.start.row,
-                          delta.range.end.row - delta.range.start.row);
-         this.$invalidateRow(delta.range.start.row);
-      }
-      else if (delta.action === "removeText")
-      {
-         if (this.$doc.isNewLine(delta.text))
-         {
-            this.$removeRows(delta.range.end.row, 1);
-            this.$invalidateRow(delta.range.start.row);
-         }
-         else
-         {
-            this.$invalidateRow(delta.range.start.row);
-         }
-      }
-
-      this.$scopes.invalidateFrom(delta.range.start);
+      this.$invalidateRow(evt.start.row);
+      this.$scopes.invalidateFrom(evt.start);
    };
    
    this.$invalidateRow = function(row)

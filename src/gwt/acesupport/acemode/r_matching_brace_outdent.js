@@ -1,7 +1,7 @@
 /*
  * r_matching_brace_outdent.js
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * The Initial Developer of the Original Code is
  * Ajax.org B.V.
@@ -28,7 +28,7 @@ define("mode/r_matching_brace_outdent", ["require", "exports", "module"], functi
    (function()
    {
       this.checkOutdent = function(state, line, input) {
-         if (/^\s+$/.test(line) && /^\s*[\{\}\)]/.test(input))
+         if (/^\s+$/.test(line) && /^\s*[\{\}\)\]]/.test(input))
             return true;
 
          // This is the case of a newline being inserted on a line that only
@@ -57,7 +57,7 @@ define("mode/r_matching_brace_outdent", ["require", "exports", "module"], functi
 
          var line = session.getLine(row);
 
-         var match = line.match(/^(\s*[\}\)])/);
+         var match = line.match(/^(\s*[\}\)\]])/);
          if (match)
          {
             var column = match[1].length;

@@ -1,7 +1,7 @@
 /*
  * ConsoleOutputWriterTests.java
  *
- * Copyright (C) 2009-17 by RStudio, Inc.
+ * Copyright (C) 2009-20 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -16,8 +16,8 @@ package org.rstudio.core.client;
 
 import java.util.List;
 
-import org.rstudio.core.client.ConsoleOutputWriter;
 import org.rstudio.core.client.dom.DomUtils;
+import org.rstudio.studio.client.workbench.prefs.model.UserPrefs;
 
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.SpanElement;
@@ -48,6 +48,45 @@ public class ConsoleOutputWriterTests extends GWTTestCase
       SpanElement outerSpan = SpanElement.as(output.getElement().getFirstChildElement());
       return outerSpan.getInnerHTML();
    }
+   
+   private static class FakePrefs implements VirtualConsole.Preferences
+   {
+      @Override
+      public int truncateLongLinesInConsoleHistory()
+      {
+         return truncateLines_;
+      }
+   
+      @Override
+      public String consoleAnsiMode()
+      {
+         return ansiMode_;
+      }
+      
+      @Override
+      public boolean screenReaderEnabled()
+      {
+         return screenReaderEnabled_;
+      }
+      
+      public int truncateLines_ = 1000;
+      public String ansiMode_ = UserPrefs.ANSI_CONSOLE_MODE_ON;
+      public boolean screenReaderEnabled_ = false;
+   }
+   
+   private class VCFactory implements VirtualConsoleFactory
+   {
+      @Override
+      public VirtualConsole create(Element elem)
+      {
+         return new VirtualConsole(elem, new FakePrefs());
+      }
+   }
+   
+   private ConsoleOutputWriter getCOW()
+   {
+      return new ConsoleOutputWriter(new VCFactory(), null);
+   }
 
    @Override
    public String getModuleName()
@@ -57,14 +96,14 @@ public class ConsoleOutputWriterTests extends GWTTestCase
 
    public void testCreation()
    {
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       Assert.assertNotNull(output);
       Assert.assertNotNull(output.getWidget());
    }
 
    public void testSetGetMaxLines()
    {
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       Assert.assertEquals(-1,  output.getMaxOutputLines());
       output.setMaxOutputLines(1000);
       Assert.assertEquals(1000, output.getMaxOutputLines());
@@ -72,16 +111,16 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    
    public void testSimpleLineCount()
    {
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       Assert.assertEquals(0, output.getCurrentLines());
       Assert.assertTrue(output.outputToConsole("Hello World", 
-            nullClazz, notError, checkLineCount));
+            nullClazz, notError, checkLineCount, false));
       Assert.assertEquals(0,  output.getCurrentLines());
       Assert.assertTrue(output.outputToConsole(" more on same line", 
-            nullClazz, notError, checkLineCount));
+            nullClazz, notError, checkLineCount, false));
       Assert.assertEquals(0,  output.getCurrentLines());
       Assert.assertTrue(output.outputToConsole("next line starts now\n", 
-            nullClazz, notError, checkLineCount));
+            nullClazz, notError, checkLineCount, false));
       Assert.assertEquals(1,  output.getCurrentLines());
       Assert.assertEquals(1, DomUtils.countLines(output.getElement(), true));
    }
@@ -91,7 +130,7 @@ public class ConsoleOutputWriterTests extends GWTTestCase
       // this test is rather bulky; it tests that lines get trimmed, but also
       // some basic cross-checking of the output structure, behavior of
       // trimOutput, and lack of a class attribute when no clazz was specified
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       final int maxLines = 25;
       output.setMaxOutputLines(maxLines);
 
@@ -99,7 +138,7 @@ public class ConsoleOutputWriterTests extends GWTTestCase
       for (int i = 0; i < maxLines; i++)
       {
          Assert.assertTrue(output.outputToConsole(numberedLine(i), 
-               nullClazz, notError, checkLineCount));
+               nullClazz, notError, checkLineCount, false));
          Assert.assertEquals(i + 1, output.getCurrentLines());
       }
       
@@ -110,12 +149,12 @@ public class ConsoleOutputWriterTests extends GWTTestCase
 
       // go over the limit
       Assert.assertFalse(output.outputToConsole(numberedLine(maxLines), 
-            nullClazz, notError, checkLineCount));
+            nullClazz, notError, checkLineCount, false));
       Assert.assertEquals(maxLines, output.getCurrentLines());
       
       // go over the limit again
       Assert.assertFalse(output.outputToConsole(numberedLine(maxLines + 1), 
-            nullClazz, notError, checkLineCount));
+            nullClazz, notError, checkLineCount, false));
       Assert.assertEquals(maxLines, output.getCurrentLines());
       
       // verify DOM matches expectations; first two output lines (0 and 1)
@@ -146,14 +185,14 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // bulk adding lets you add more lines than the maximum, but defer 
       // trimming until the end
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       final int maxLines = 50;
       output.setMaxOutputLines(maxLines);
 
       for (int i = 0; i < maxLines + 10; i++)
       {
          Assert.assertTrue(output.outputToConsole(numberedLine(i), 
-               myClass, notError, ignoreLineCount));
+               myClass, notError, ignoreLineCount, false));
          Assert.assertEquals(i + 1, output.getCurrentLines());
       }
       
@@ -175,11 +214,11 @@ public class ConsoleOutputWriterTests extends GWTTestCase
 
    public void testWriteSimpleError()
    {
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       String errorMsg = "Oh no, an error!!";
 
       Assert.assertTrue(output.outputToConsole(errorMsg,
-               myErrorClass, isError, ignoreLineCount));
+               myErrorClass, isError, ignoreLineCount, false));
       
       Assert.assertEquals(0,  output.getCurrentLines());
 
@@ -189,11 +228,11 @@ public class ConsoleOutputWriterTests extends GWTTestCase
 
    public void testWriteSimpleErrorWithNewline()
    {
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       String errorMsg = "Oh no, an error!!\n";
 
       Assert.assertTrue(output.outputToConsole(errorMsg,
-               myErrorClass, isError, ignoreLineCount));
+               myErrorClass, isError, ignoreLineCount, false));
       
       Assert.assertEquals(1, output.getCurrentLines());
       String expected = "<span class=\"myErrorClass\">" + errorMsg + "</span>";
@@ -212,15 +251,15 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // output multiple errors with same style, ensure each goes into its own
       // span and the final one is captured and available via getNewElements
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("4\n", myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("4\n", myErrorClass, isError, ignoreLineCount, false);
       
       String lastError = "Error in h() : An error! Oh No!"; 
-      output.outputToConsole(lastError, myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole(lastError, myErrorClass, isError, ignoreLineCount, false);
       
       String lastErrorSpan = "<span class=\"myErrorClass\">" + lastError + "</span>";
       String expected = 
@@ -245,19 +284,19 @@ public class ConsoleOutputWriterTests extends GWTTestCase
       // each goes into its own span with correct styles, and the final one,
       // which also has multiple styles and spans three lines is 
       // captured and available via getNewElements.
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("4\n", myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("4\n", myErrorClass, isError, ignoreLineCount, false);
       
       String lastError1 = "Error in h2() : An error!\n";
       String lastError2 = "\033[31mOh No!\n\033[39m";
       String lastError3 = "\033[43m\033[31mWow!\033[39m\033[49m";
       
       output.outputToConsole(lastError1 + lastError2 + lastError3, 
-            myErrorClass, isError, ignoreLineCount);
+            myErrorClass, isError, ignoreLineCount, false);
       
       String lastError1Span = "<span class=\"myErrorClass\">" + 
                   lastError1 + "</span>";
@@ -289,10 +328,10 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // output two regular strings, without a newline, and make sure
       // they turn into a single span of text
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("Hello", myClass, notError, ignoreLineCount);
-      output.outputToConsole("World", myClass, notError, ignoreLineCount);
+      output.outputToConsole("Hello", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("World", myClass, notError, ignoreLineCount, false);
       
       Assert.assertEquals(0, output.getCurrentLines());
       
@@ -304,12 +343,12 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // output 4 regular strings followed by newlines; should end up in a
       // single span
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("One\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("Two\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("Three\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("Four\n", myClass, notError, ignoreLineCount);
+      output.outputToConsole("One\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("Two\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("Three\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("Four\n", myClass, notError, ignoreLineCount, false);
       
       Assert.assertEquals(4, output.getCurrentLines());
       
@@ -322,13 +361,13 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // output two error strings, then one regular string, then another error
       // and make sure DOM ends up as expected
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("Hello ", myClass, notError, ignoreLineCount);
-      output.outputToConsole("world\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("Hello ", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("world\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount, false);
       
       Assert.assertEquals(4, output.getCurrentLines());
       
@@ -348,12 +387,12 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // output 4 error messages without ansi codes; each should end up in its
       // own span, and the final should be captured
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("4", myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("4", myErrorClass, isError, ignoreLineCount, false);
       
       Assert.assertEquals(3, output.getCurrentLines());
       
@@ -373,10 +412,10 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    public void test7()
    {
       // output a single error message with ansi code in it
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
       output.outputToConsole("Error in test7a() : \033[32mHi\033[39m", myErrorClass, 
-            isError, ignoreLineCount);
+            isError, ignoreLineCount, false);
       
       Assert.assertEquals(0, output.getCurrentLines());
       
@@ -397,19 +436,19 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // Write four error lines, then a complex multi-line error message with
       // ansi codes.
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
 
-      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("4\n", myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("4\n", myErrorClass, isError, ignoreLineCount, false);
       output.outputToConsole(
             "Error in test8b() : An error!\n" +
             "\033[31mOh No!\n\033[39m" +
             "\033[43m\033[31mA multiline error with colors.\n\033[39m\033[49m" +
             "\033[7mAnd some inverse text.\n\033[27m" +
             "\033[1m\033[3mThe Horror!!\033[23m\033[22m",
-            myErrorClass, isError, ignoreLineCount);
+            myErrorClass, isError, ignoreLineCount, false);
       
       Assert.assertEquals(8, output.getCurrentLines());
       
@@ -449,10 +488,10 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    public void test9()
    {
       // write a single-line error followed by a multi-line error, no ansi codes
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
 
-      output.outputToConsole("Hello\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("A\nB\nC", myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole("Hello\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("A\nB\nC", myErrorClass, isError, ignoreLineCount, false);
 
       Assert.assertEquals(3, output.getCurrentLines());
 
@@ -470,9 +509,9 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    public void test10()
    {
       // inline editing via \r without ansi codes
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
-      output.outputToConsole("\rfoobar", myClass, notError, ignoreLineCount);
-      output.outputToConsole("\rX foobar\n", myClass, notError, ignoreLineCount);
+      ConsoleOutputWriter output = getCOW();
+      output.outputToConsole("\rfoobar", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("\rX foobar\n", myClass, notError, ignoreLineCount, false);
       
       Assert.assertEquals(1, output.getCurrentLines());
       Assert.assertEquals(
@@ -483,10 +522,10 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    public void test11()
    {
       // inline editing via \r with ansi codes
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
-      output.outputToConsole("\rfoobar", myClass, notError, ignoreLineCount);
+      ConsoleOutputWriter output = getCOW();
+      output.outputToConsole("\rfoobar", myClass, notError, ignoreLineCount, false);
       output.outputToConsole("\r\033[32mX\033[39m \033[31mfoobar\033[39m\n", 
-            myClass, notError, ignoreLineCount);
+            myClass, notError, ignoreLineCount, false);
       
       Assert.assertEquals(1, output.getCurrentLines());
       Assert.assertEquals(
@@ -501,10 +540,10 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // inline editing via \r with ansi codes; multiple output lines, don't
       // overwrite entire original output
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
-      output.outputToConsole("Hello\nWorld", myClass, notError, ignoreLineCount);
+      ConsoleOutputWriter output = getCOW();
+      output.outputToConsole("Hello\nWorld", myClass, notError, ignoreLineCount, false);
       output.outputToConsole("\r\033[32mX\033[39m \033[31mY\033[39m\n", 
-            myClass, notError, ignoreLineCount);
+            myClass, notError, ignoreLineCount, false);
       
       Assert.assertEquals(2, output.getCurrentLines());
       Assert.assertEquals(
@@ -520,10 +559,10 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    {
       // inline editing via \r with ansi codes; multiple output lines, 
       // overwrite entire original output
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
-      output.outputToConsole("Hello\nWorld", myClass, notError, ignoreLineCount);
+      ConsoleOutputWriter output = getCOW();
+      output.outputToConsole("Hello\nWorld", myClass, notError, ignoreLineCount, false);
       output.outputToConsole("\r\033[32m123\033[39m\033[31m45\033[39m\n", 
-            myClass, notError, ignoreLineCount);
+            myClass, notError, ignoreLineCount, false);
       
       Assert.assertEquals(2, output.getCurrentLines());
       Assert.assertEquals(
@@ -538,15 +577,15 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    public void test14()
    {
       // output mixture of normal and error output, make sure DOM is correct
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("Beginning\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("Hello ", myClass, notError, ignoreLineCount);
-      output.outputToConsole("world\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("END", myClass, notError, ignoreLineCount);
+      output.outputToConsole("Beginning\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("Hello ", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("world\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("3\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("END", myClass, notError, ignoreLineCount, false);
       
       Assert.assertEquals(5, output.getCurrentLines());
       
@@ -563,13 +602,13 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    public void test15()
    {
       // write multiple error lines followed by a multi-line error, no ansi codes
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
 
-      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount);
-      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount);
+      output.outputToConsole("1\n", myErrorClass, isError, ignoreLineCount, false);
+      output.outputToConsole("2\n", myErrorClass, isError, ignoreLineCount, false);
       output.outputToConsole(
             "Error in h15() : A multiline error without colors!\nOh No!", 
-            myErrorClass, isError, ignoreLineCount);
+            myErrorClass, isError, ignoreLineCount, false);
 
       Assert.assertEquals(3, output.getCurrentLines());
 
@@ -590,11 +629,11 @@ public class ConsoleOutputWriterTests extends GWTTestCase
    public void test16()
    {
       // write several lines of regular output
-      ConsoleOutputWriter output = new ConsoleOutputWriter();
+      ConsoleOutputWriter output = getCOW();
       
-      output.outputToConsole("one\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("two\n", myClass, notError, ignoreLineCount);
-      output.outputToConsole("three", myClass, notError, ignoreLineCount);
+      output.outputToConsole("one\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("two\n", myClass, notError, ignoreLineCount, false);
+      output.outputToConsole("three", myClass, notError, ignoreLineCount, false);
 
       Assert.assertEquals(2, output.getCurrentLines());
 

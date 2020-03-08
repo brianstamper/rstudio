@@ -1,7 +1,7 @@
 /*
  * ShortcutsEmitter.java
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-20 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -19,7 +19,6 @@ import com.google.gwt.core.ext.TreeLogger.Type;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.user.rebind.SourceWriter;
 
-import org.rstudio.core.client.Pair;
 import org.rstudio.core.client.command.KeyboardShortcut;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -35,6 +34,13 @@ import java.util.List;
 
 public class ShortcutsEmitter
 {
+   private static class ShortcutKeyCombination
+   {
+      public String key;
+      public String keyCode;
+      public int modifiers;
+   }
+   
    public ShortcutsEmitter(TreeLogger logger,
                            String groupName, 
                            Element shortcutsEl) throws UnableToCompleteException
@@ -112,7 +118,8 @@ public class ShortcutsEmitter
                               String title,
                               String disableModes) throws UnableToCompleteException
    {
-      List<Pair<Integer, String>> keys = new ArrayList<Pair<Integer, String>>();
+      List<ShortcutKeyCombination> keys = new ArrayList<ShortcutKeyCombination>();
+      
       for (String keyCombination : shortcut.split("\\s+"))
       {
          String[] chunks = keyCombination.split("\\+");
@@ -142,20 +149,17 @@ public class ShortcutsEmitter
             }
          }
             
-         // Validate the key name.
-         String key = toKey(chunks[chunks.length - 1]);
-         if (key == null)
-         {
-            logger_.log(Type.ERROR,
-                  "Invalid shortcut '" + shortcut + "', only " +
-                  "modified alphanumeric characters, enter, " +
-                  "left, right, up, down, pageup, pagedown, " +
-                  "and tab are valid");
-            throw new UnableToCompleteException();
-         }
+         // Extract the key name.
+         String key = chunks[chunks.length - 1];
          
-         // Push the parsed keys to the list.
-         keys.add(new Pair<Integer, String>(modifiers, key));
+         // Push the keys to the list.
+         ShortcutKeyCombination combination = new ShortcutKeyCombination();
+         
+         combination.key = key;
+         combination.keyCode = toKeyCode(key);
+         combination.modifiers = modifiers;
+         
+         keys.add(combination);
       }
       
       // Emit the relevant code registering these shortcuts.
@@ -167,11 +171,15 @@ public class ShortcutsEmitter
       
       if (keys.size() == 1)
       {
-         int modifiers = keys.get(0).first;
-         String key = keys.get(0).second;
+         ShortcutKeyCombination combination = keys.get(0);
          writer.println("ShortcutManager.INSTANCE.register(" +
-               modifiers + ", " +
-               key + ", " +
+         
+               // Key set
+               "\"" + combination.key + "\", " +
+               combination.keyCode + ", " +
+               combination.modifiers + ", " +
+               
+               // Command + group
                command + ", " +
                "\"" + shortcutGroup + "\", " +
                "\"" + title + "\", " + 
@@ -179,21 +187,26 @@ public class ShortcutsEmitter
       }
       else if (keys.size() == 2)
       {
-         int m1    = keys.get(0).first;
-         String k1 = keys.get(0).second;
-         int m2    = keys.get(1).first;
-         String k2 = keys.get(1).second;
+         ShortcutKeyCombination c1 = keys.get(0);
+         ShortcutKeyCombination c2 = keys.get(1);
          
          writer.println("ShortcutManager.INSTANCE.register(" +
-               m1 + ", " +
-               k1 + ", " +
-               m2 + ", " +
-               k2 + ", " +
+         
+               // First key set
+               "\"" + c1.key + "\", " +
+               c1.keyCode + ", " +
+               c1.modifiers + ", " +
+               
+               // Second key set
+               "\"" + c2.key + "\", " +
+               c2.keyCode + ", " +
+               c2.modifiers + ", " +
+               
+               // Command + group
                command + ", " +
                "\"" + shortcutGroup + "\", " +
                "\"" + title + "\", " + 
                "\"" + disableModes + "\");");
-         
       }
       else
       {
@@ -210,7 +223,7 @@ public class ShortcutsEmitter
       }
    }
 
-   private String toKey(String val)
+   private String toKeyCode(String val)
    {
       if (val.matches("^[a-zA-Z0-9]$"))
          return "'" + val.toUpperCase() + "'";
@@ -232,6 +245,8 @@ public class ShortcutsEmitter
          return "com.google.gwt.event.dom.client.KeyCodes.KEY_PAGEUP";
       if (val.equalsIgnoreCase("pagedown"))
          return "com.google.gwt.event.dom.client.KeyCodes.KEY_PAGEDOWN";
+      if (val.equalsIgnoreCase("space"))
+         return "32";
       if (val.equalsIgnoreCase("F1"))
          return "112";
       if (val.equalsIgnoreCase("F2"))
@@ -256,6 +271,30 @@ public class ShortcutsEmitter
          return "122";
       if (val.equalsIgnoreCase("F12"))
          return "123";
+      if (val.equalsIgnoreCase("F13"))
+         return "124";
+      if (val.equalsIgnoreCase("F14"))
+         return "125";
+      if (val.equalsIgnoreCase("F15"))
+         return "126";
+      if (val.equalsIgnoreCase("F16"))
+         return "127";
+      if (val.equalsIgnoreCase("F17"))
+         return "128";
+      if (val.equalsIgnoreCase("F18"))
+         return "129";
+      if (val.equalsIgnoreCase("F19"))
+         return "130";
+      if (val.equalsIgnoreCase("F20"))
+         return "131";
+      if (val.equalsIgnoreCase("F21"))
+         return "132";
+      if (val.equalsIgnoreCase("F22"))
+         return "133";
+      if (val.equalsIgnoreCase("F23"))
+         return "134";
+      if (val.equalsIgnoreCase("F24"))
+         return "135";
       if (val.equals("`"))
          return "192";
       if (val.equals("."))
@@ -272,6 +311,8 @@ public class ShortcutsEmitter
          return "219";
       if (val.equals("]"))
          return "221";
+
+      logger_.log(Type.WARN, "Returning null from toKeyCode for key " + val);
       return null;
    }
 

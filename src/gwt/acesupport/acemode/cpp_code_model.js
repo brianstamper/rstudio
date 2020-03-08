@@ -1,7 +1,7 @@
 /*
  * cpp_code_model.js
  *
- * Copyright (C) 2009-12 by RStudio, Inc.
+ * Copyright (C) 2009-12 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -1625,46 +1625,13 @@ var CppCodeModel = function(session, tokenizer,
 
    this.$onDocChange = function(evt)
    {
-      var delta = evt.data;
+      if (evt.action === "insert")
+         this.$tokenUtils.$insertNewRows(evt.start.row, evt.end.row - evt.start.row);
+      else
+         this.$tokenUtils.$removeRows(evt.start.row, evt.end.row - evt.start.row);
 
-      if (delta.action === "insertLines")
-      {
-         this.$tokenUtils.$insertNewRows(delta.range.start.row,
-                             delta.range.end.row - delta.range.start.row);
-      }
-      else if (delta.action === "insertText")
-      {
-         if (this.$doc.isNewLine(delta.text))
-         {
-            this.$tokenUtils.$invalidateRow(delta.range.start.row);
-            this.$tokenUtils.$insertNewRows(delta.range.end.row, 1);
-         }
-         else
-         {
-            this.$tokenUtils.$invalidateRow(delta.range.start.row);
-         }
-      }
-      else if (delta.action === "removeLines")
-      {
-         this.$tokenUtils.$removeRows(delta.range.start.row,
-                          delta.range.end.row - delta.range.start.row);
-         this.$tokenUtils.$invalidateRow(delta.range.start.row);
-      }
-      else if (delta.action === "removeText")
-      {
-         if (this.$doc.isNewLine(delta.text))
-         {
-            this.$tokenUtils.$removeRows(delta.range.end.row, 1);
-            this.$tokenUtils.$invalidateRow(delta.range.start.row);
-         }
-         else
-         {
-            this.$tokenUtils.$invalidateRow(delta.range.start.row);
-         }
-      }
-
-      this.$scopes.invalidateFrom(delta.range.start);
-
+      this.$tokenUtils.$invalidateRow(evt.start.row);
+      this.$scopes.invalidateFrom(evt.start);
    };
 
    this.$getIndent = function(line)

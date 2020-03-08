@@ -1,7 +1,7 @@
 /*
  * ProjectUserChangedEvent.java
  *
- * Copyright (C) 2009-15 by RStudio, Inc.
+ * Copyright (C) 2009-15 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -77,6 +77,7 @@ public class ProjectUserChangedEvent
    public static final String JOINED   = "joined";
    public static final String LEFT     = "left";
    public static final String REPLACED = "replaced";
+   public static final String CHANGED  = "changed";
 
    public static final Type<Handler> TYPE = new Type<Handler>();
 }

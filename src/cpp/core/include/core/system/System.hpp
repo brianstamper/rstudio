@@ -1,7 +1,7 @@
 /*
  * System.hpp
  *
- * Copyright (C) 2009-18 by RStudio, Inc.
+ * Copyright (C) 2009-19 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -35,10 +35,11 @@ typedef uid_t UidType;
 #include <boost/utility.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/function.hpp>
+#include <boost/date_time.hpp>
 
 #include <core/Log.hpp>
-#include <core/Error.hpp>
-#include <core/FilePath.hpp>
+#include <shared_core/Error.hpp>
+#include <shared_core/FilePath.hpp>
 
 #include <core/system/Types.hpp>
 
@@ -48,14 +49,6 @@ namespace core {
 class FileInfo;
 
 namespace system {
-
-enum LogLevel 
-{
-   kLogLevelError = 0,
-   kLogLevelWarning = 1,
-   kLogLevelInfo = 2,
-   kLogLevelDebug = 3
-};
 
 // portable realPath
 Error realPath(const FilePath& filePath, FilePath* pRealPath);
@@ -123,7 +116,7 @@ T posixCall(const boost::function<T()>& func)
 template <typename T>
 Error posixCall(const boost::function<T()>& func,
                        const ErrorLocation& location,
-                       T *pResult = NULL)
+                       T *pResult = nullptr)
 {
    const T ERR = -1;
 
@@ -147,7 +140,7 @@ template <typename T>
 void safePosixCall(const boost::function<T()>& func,
                           const ErrorLocation& location)
 {
-   Error error = posixCall<T>(func, location, NULL);
+   Error error = posixCall<T>(func, location, nullptr);
    if (error)
       LOG_ERROR(error);
 }
@@ -182,7 +175,7 @@ public:
    }
 
    virtual ~CloseHandleOnExitScope();
-   void detach() { pHandle_ = NULL; }
+   void detach() { pHandle_ = nullptr; }
 private:
    HANDLE* pHandle_;
    ErrorLocation location_;
@@ -197,15 +190,27 @@ FilePath systemSettingsPath(const std::string& appName, bool create);
 #endif // WIN32
 
 void initHook();
-// initialization (not thread safe, call from main thread at app startup)  
-void initializeSystemLog(const std::string& programIdentity, int logLevel);
-void initializeStderrLog(const std::string& programIdentity, int logLevel);
-void initializeLog(const std::string& programIdentity,
-                   int logLevel,
-                   const FilePath& logDir);
 
-Error setExitFunction(void (*exitFunction) (void));
-   
+// initialization
+Error initializeSystemLog(const std::string& programIdentity,
+                          log::LogLevel logLevel,
+                          bool enableConfigReload = true);
+
+Error initializeStderrLog(const std::string& programIdentity,
+                          log::LogLevel logLevel,
+                          bool enableConfigReload = true);
+
+Error initializeLog(const std::string& programIdentity,
+                    log::LogLevel logLevel,
+                    const FilePath& logDir,
+                    bool enableConfigReload = true);
+
+void initializeLogConfigReload();
+
+// common initialization functions - do not invoke directly
+Error initLog();
+Error reinitLog();
+
 // exit
 int exitFailure(const Error& error, const ErrorLocation& loggedFromLocation);
 int exitFailure(const std::string& errMsg,
@@ -264,6 +269,7 @@ void sendSignalToSelf(SignalType signal);
 
 // user info
 std::string username();
+
 FilePath userHomePath(std::string envOverride = std::string());
 FilePath userSettingsPath(const FilePath& userHomeDirectory,
                           const std::string& appName,
@@ -273,7 +279,21 @@ bool effectiveUserIsRoot();
 bool currentUserIsPrivilleged(unsigned int minimumUserId);
 
 // log
-void log(LogLevel level, const std::string& message) ;
+void log(log::LogLevel level,
+         const char* message,
+         const std::string&logSection = std::string());
+
+void log(log::LogLevel level,
+         const std::string& message,
+         const std::string& logSection = std::string());
+
+void log(log::LogLevel level,
+         const boost::function<std::string()>& action,
+         const std::string& logSection = std::string());
+
+const char* logLevelToStr(log::LogLevel level);
+
+log::LogLevel lowestLogLevel();
 
 // filesystem
 bool isHiddenFile(const FilePath& filePath) ;
@@ -291,6 +311,7 @@ std::string generateShortenedUuid();
 // process info
 
 PidType currentProcessId();
+std::string currentProcessPidStr();
 
 Error executablePath(int argc, const char * argv[],
                      FilePath* pExecutablePath);
@@ -322,7 +343,40 @@ std::vector<SubprocInfo> getSubprocesses(PidType pid);
 // if unable to determine cwd
 FilePath currentWorkingDir(PidType pid);
 
+struct ProcessInfo
+{
+   ProcessInfo() : pid(0), ppid(0), pgrp(0) {}
+   PidType pid;
+   PidType ppid;
+   PidType pgrp;
+   std::string username;
+   std::string exe;
+   std::string state;
+   std::vector<std::string> arguments;
+
+#if !defined _WIN32 && !defined __APPLE__
+   core::Error creationTime(boost::posix_time::ptime* pCreationTime) const;
+#endif
+};
+
+// simple encapsulation of parent-child relationship of processes
+struct ProcessTreeNode
+{
+   boost::shared_ptr<ProcessInfo> data;
+   std::vector<boost::shared_ptr<ProcessTreeNode> > children;
+};
+
+// process tree, indexed by pid
+typedef std::map<PidType, boost::shared_ptr<ProcessTreeNode> > ProcessTreeT;
+
 Error terminateChildProcesses();
+
+void createProcessTree(const std::vector<ProcessInfo>& processes,
+                       ProcessTreeT *pOutTree);
+
+void getChildren(const boost::shared_ptr<ProcessTreeNode>& node,
+                 std::vector<ProcessInfo>* pOutChildren,
+                 int depth = 0);
    
 } // namespace system
 } // namespace core 

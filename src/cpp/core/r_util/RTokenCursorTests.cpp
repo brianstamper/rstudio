@@ -1,7 +1,7 @@
 /*
  * SessionRTokenCursorTests.cpp
  *
- * Copyright (C) 2009-17 by RStudio, Inc.
+ * Copyright (C) 2009-17 by RStudio, PBC
  *
  * Unless you have received this program directly from RStudio pursuant
  * to the terms of a commercial license agreement with RStudio, then
@@ -28,7 +28,7 @@ bool isPipeOperator(const std::wstring& string)
    return regex_utils::match(string.begin(), string.end(), rePipe);
 }
 
-context("RTokenCursor")
+test_context("RTokenCursor")
 {
    test_that("Token cursors properly detect end of statements")
    {

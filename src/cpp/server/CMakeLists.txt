@@ -1,7 +1,7 @@
 #
 # CMakeLists.txt
 #
-# Copyright (C) 2009-18 by RStudio, Inc.
+# Copyright (C) 2009-19 by RStudio, PBC
 #
 # Unless you have received this program directly from RStudio pursuant
 # to the terms of a commercial license agreement with RStudio, then
@@ -16,6 +16,7 @@
 project (SERVER)
 
 add_subdirectory(pam)
+add_subdirectory(crash-handler-proxy)
 
 # include files
 file(GLOB_RECURSE SERVER_HEADER_FILES "*.h*")
@@ -40,7 +41,6 @@ set(SERVER_SOURCE_FILES
    ServerSessionProxyOverlay.cpp
    ServerSessionManager.cpp
    auth/ServerAuthHandler.cpp
-   auth/ServerCSRFToken.cpp
    auth/ServerSecureUriHandler.cpp
    auth/ServerValidateUser.cpp
    ${CMAKE_CURRENT_BINARY_DIR}/ServerAddins.cpp
@@ -150,23 +150,18 @@ include_directories(
    ${CORE_INCLUDE_DIRS}
    ${MONITOR_SOURCE_DIR}/include
    ${SESSION_SOURCE_DIR}/include
+   ${SHARED_CORE_SOURCE_DIR}/include
 )
 
 # define executable
-add_executable(rserver ${SERVER_SOURCE_FILES} ${SERVER_HEADER_FILES})
-
-# add origin rpath for suse/sles
-if(RSTUDIO_PACKAGE_VARIANT STREQUAL "SLES")
-   set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-   set_target_properties(rserver PROPERTIES
-                         INSTALL_RPATH \$ORIGIN)
-endif()
+add_stripped_executable(rserver ${SERVER_SOURCE_FILES} ${SERVER_HEADER_FILES})
 
 # set link dependencies
 target_link_libraries(rserver
    rstudio-core
    rstudio-server-core
    rstudio-monitor
+   ${CRASHPAD_LIBRARIES}
    ${SERVER_SYSTEM_LIBRARIES}
 )
 
